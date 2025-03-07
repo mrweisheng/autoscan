@@ -1,0 +1,184 @@
+# Auto Login Service API 文档
+
+## 基础信息
+- 基础URL: http://localhost:5000
+- 所有接口均使用 GET 方法
+- 响应格式: JSON
+
+## 通用响应格式
+成功响应:
+{
+    "status": "success",
+    "data": {}, // 可选
+    "message": "xxx" // 可选
+}
+
+错误响应:
+{
+    "status": "error",
+    "message": "错误信息"
+}
+
+## API 端点详情
+
+### 1. 手机端推送登录需求
+- 接口: /mobile/push-need-login
+- 方法: GET
+- 描述: 手机端发起登录请求，记录需要登录的设备信息
+- 请求参数:
+  - name: 字符串，必填，用户名
+  - phone_device: 字符串，必填，设备标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "message": "Login request recorded"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing required parameters: name and phone_device"
+    }
+
+### 2. PC端获取需要登录的账号信息
+- 接口: /pc/get_need_login
+- 方法: GET
+- 描述: PC端获取待登录的账号信息，获取后该记录会被删除
+- 请求参数:
+  - phone_device: 字符串，必填，设备标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "name": "用户名",
+            "phone_device": "设备标识",
+            "login_status": "状态"
+        }
+    }
+  - 未找到记录 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "No record found for this device"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing phone_device parameter"
+    }
+
+### 3. PC端推送扫码需求
+- 接口: /pc/push_need_scan
+- 方法: GET
+- 描述: PC端请求手机扫码，创建扫码记录
+- 请求参数:
+  - name: 字符串，必填，用户名
+  - phone_device: 字符串，必填，设备标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "message": "Successfully inserted scan record for: {name}"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing required parameters: name and phone_device"
+    }
+
+### 4. 手机端获取需要扫码的记录
+- 接口: /mobile/get-need-scan
+- 方法: GET
+- 描述: 手机端获取待扫码的记录，获取后该记录会被删除
+- 请求参数:
+  - phone_device: 字符串，必填，设备标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "name": "用户名",
+            "phone_device": "设备标识",
+            "login_status": "scan"
+        }
+    }
+  - 未找到记录 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "No scan record found for this device"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing phone_device parameter"
+    }
+
+### 5. 获取不活跃账号
+- 接口: /accounts/inactive
+- 方法: GET
+- 描述: 获取超过12天未登录的账号列表
+- 请求参数:
+  - days: 整数，可选，指定未登录天数（1-20之间），默认使用配置文件中的值（12天）
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": [
+            {
+                "phoneNumber": "639123456789",
+                "name": "User Name",
+                "lastLogin": "2025-02-20T04:39:41.000Z",
+                "proxy": {
+                    "host": "72.1.123.123",
+                    "port": "8080",
+                    "username": "proxyuser",
+                    "password": "proxypass"
+                }
+            }
+        ]
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "Days parameter must be an integer between 1 and 20"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "Internal server error"
+    }
+
+### 6. 更新账号最后登录时间
+- 接口: /accounts/update-login
+- 方法: GET
+- 描述: 更新指定账号的最后登录时间为当前时间
+- 请求参数:
+  - phoneNumber: 字符串，必填，手机号码
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "phoneNumber": "639123456789",
+            "lastLogin": "2025-03-07T08:30:00.000Z"
+        }
+    }
+  - 未找到账号 (404):
+    {
+        "status": "success",
+        "message": "Account not found"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing phoneNumber parameter"
+    }
+
+## 错误码说明
+- 200: 请求成功
+- 400: 请求参数错误
+- 404: 未找到相关记录
+- 500: 服务器内部错误
+
