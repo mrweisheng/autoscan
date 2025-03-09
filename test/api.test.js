@@ -8,18 +8,22 @@ require('dotenv').config({ path: '.env.test' });
 
 describe('Auto Login API Tests', () => {
     let app;
-    let server;
-    const testDevice = 'test_device_' + Date.now();
-    const testName = 'test_user_' + Date.now();
+    const apiServer = process.env.API_SERVER;
+    // 添加测试用的基础变量
+    const baseTestName = 'test_user';
+    const baseTestDevice = 'test_device';
 
     // 在所有测试开始前设置
     beforeAll(async () => {
         jest.setTimeout(30000);
         
         try {
-            app = await createServer();
-            server = app.listen(0);
-            logger.info('Test server started');
+            // 连接到测试数据库
+            await mongoose.connect(process.env.MONGODB_URI, {
+                serverSelectionTimeoutMS: parseInt(process.env.MONGODB_TIMEOUT_MS),
+                socketTimeoutMS: parseInt(process.env.MONGODB_TIMEOUT_MS)
+            });
+            logger.info('Test database connected');
         } catch (error) {
             logger.error('Test setup failed:', error);
             throw error;
@@ -31,68 +35,15 @@ describe('Auto Login API Tests', () => {
         try {
             logger.info('Starting final cleanup...');
             
-            // 1. 先获取集合的索引信息
-            const indexes = await mongoose.connection.db
-                .collection('userloginstatuses')
-                .indexes();
-            logger.info('Saved collection indexes:', indexes);
-
-            // 2. 删除集合
-            await mongoose.connection.db.collection('userloginstatuses').drop();
-            logger.info('Collection dropped');
-
-            // 3. 重新创建集合
-            await mongoose.connection.db.createCollection('userloginstatuses');
-            logger.info('Collection recreated');
-
-            // 4. 重新创建索引
-            for (const index of indexes) {
-                if (index.name !== '_id_') { // 跳过默认的_id索引
-                    await mongoose.connection.db
-                        .collection('userloginstatuses')
-                        .createIndex(
-                            index.key,
-                            {
-                                name: index.name,
-                                unique: index.unique,
-                                sparse: index.sparse,
-                                background: true
-                            }
-                        );
-                }
-            }
-            logger.info('Indexes recreated');
-
-            // 5. 验证集合是否为空且结构完整
-            const count = await mongoose.connection.db
-                .collection('userloginstatuses')
-                .countDocuments();
+            // 清理测试数据
+            await mongoose.connection.db.collection('userloginstatuses').deleteMany({});
+            await mongoose.connection.db.collection('accounts').deleteMany({});
             
-            const newIndexes = await mongoose.connection.db
-                .collection('userloginstatuses')
-                .indexes();
-            
-            logger.info(`Collection is empty: ${count === 0}`);
-            logger.info(`Collection structure verified: ${newIndexes.length === indexes.length}`);
-
-            // 6. 关闭连接
+            // 关闭数据库连接
             await mongoose.connection.close();
-            await new Promise(resolve => server.close(resolve));
-            logger.info('Test cleanup completed: data cleared, structure preserved');
+            logger.info('Test cleanup completed');
         } catch (error) {
             logger.error('Test cleanup failed:', error);
-            throw error;
-        }
-    });
-
-    // 在每个测试后清理数据
-    afterEach(async () => {
-        try {
-            // 每个测试后清理数据
-            await mongoose.connection.db.collection('userloginstatuses').deleteMany({});
-            logger.info('Individual test data cleaned up');
-        } catch (error) {
-            logger.error('Individual test cleanup failed:', error);
             throw error;
         }
     });
@@ -100,12 +51,15 @@ describe('Auto Login API Tests', () => {
     // 测试手机端推送登录需求
     describe('Mobile Push Need Login', () => {
         it('should create a login request successfully', async () => {
-            const uniqueDevice = `${testDevice}_push_${Date.now()}`;
-            const response = await request(app)
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            const testDevice = `${baseTestDevice}_${timestamp}`;
+            
+            const response = await request(apiServer)
                 .get('/mobile/push-need-login')
                 .query({
                     name: testName,
-                    phone_device: uniqueDevice
+                    phone_device: testDevice
                 });
 
             expect(response.status).toBe(200);
@@ -114,7 +68,10 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should fail without required parameters', async () => {
-            const response = await request(app)
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            
+            const response = await request(apiServer)
                 .get('/mobile/push-need-login')
                 .query({
                     name: testName
@@ -129,9 +86,12 @@ describe('Auto Login API Tests', () => {
     // 测试PC端获取需要登录的账号信息
     describe('PC Get Need Login', () => {
         it('should get login request successfully', async () => {
-            const uniqueDevice = `${testDevice}_get_${Date.now()}`;
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            const uniqueDevice = `${baseTestDevice}_get_${timestamp}`;
+            
             // 先创建一个登录请求
-            await request(app)
+            await request(apiServer)
                 .get('/mobile/push-need-login')
                 .query({
                     name: testName,
@@ -139,7 +99,7 @@ describe('Auto Login API Tests', () => {
                 });
 
             // 然后获取这个登录请求
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/pc/get_need_login')
                 .query({
                     phone_device: uniqueDevice
@@ -152,7 +112,7 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should return 404 when no login request exists', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/pc/get_need_login')
                 .query({
                     phone_device: 'non_existent_device'
@@ -167,8 +127,11 @@ describe('Auto Login API Tests', () => {
     // 测试PC端推送扫码需求
     describe('PC Push Need Scan', () => {
         it('should create a scan request successfully', async () => {
-            const uniqueDevice = `${testDevice}_scan_${Date.now()}`;
-            const response = await request(app)
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            const uniqueDevice = `${baseTestDevice}_scan_${timestamp}`;
+            
+            const response = await request(apiServer)
                 .get('/pc/push_need_scan')
                 .query({
                     name: testName,
@@ -177,11 +140,14 @@ describe('Auto Login API Tests', () => {
 
             expect(response.status).toBe(200);
             expect(response.body.status).toBe('success');
-            expect(response.body.message).toBe(`Successfully inserted scan record for: ${testName}`);
+            expect(response.body.message).toBe(`Successfully processed scan record for: ${testName}`);
         });
 
         it('should fail without required parameters', async () => {
-            const response = await request(app)
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            
+            const response = await request(apiServer)
                 .get('/pc/push_need_scan')
                 .query({
                     name: testName
@@ -196,9 +162,12 @@ describe('Auto Login API Tests', () => {
     // 测试手机端获取需要扫码的记录
     describe('Mobile Get Need Scan', () => {
         it('should get scan request successfully', async () => {
-            const uniqueDevice = `${testDevice}_get_scan_${Date.now()}`;
+            const timestamp = Date.now();
+            const testName = `${baseTestName}_${timestamp}`;
+            const uniqueDevice = `${baseTestDevice}_get_scan_${timestamp}`;
+            
             // 先创建一个扫码请求
-            await request(app)
+            await request(apiServer)
                 .get('/pc/push_need_scan')
                 .query({
                     name: testName,
@@ -206,7 +175,7 @@ describe('Auto Login API Tests', () => {
                 });
 
             // 然后获取这个扫码请求
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/mobile/get-need-scan')
                 .query({
                     phone_device: uniqueDevice
@@ -220,7 +189,7 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should return 404 when no scan request exists', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/mobile/get-need-scan')
                 .query({
                     phone_device: 'non_existent_device'
@@ -239,7 +208,7 @@ describe('Auto Login API Tests', () => {
             const flowName = `flow_test_user_${Date.now()}`;
 
             // 1. 手机端推送登录需求
-            let response = await request(app)
+            let response = await request(apiServer)
                 .get('/mobile/push-need-login')
                 .query({
                     name: flowName,
@@ -248,7 +217,7 @@ describe('Auto Login API Tests', () => {
             expect(response.status).toBe(200);
 
             // 2. PC端获取登录需求
-            response = await request(app)
+            response = await request(apiServer)
                 .get('/pc/get_need_login')
                 .query({
                     phone_device: flowDevice
@@ -257,7 +226,7 @@ describe('Auto Login API Tests', () => {
             expect(response.body.data).toHaveProperty('name', flowName);
 
             // 3. PC端推送扫码需求
-            response = await request(app)
+            response = await request(apiServer)
                 .get('/pc/push_need_scan')
                 .query({
                     name: flowName,
@@ -266,7 +235,7 @@ describe('Auto Login API Tests', () => {
             expect(response.status).toBe(200);
 
             // 4. 手机端获取扫码需求
-            response = await request(app)
+            response = await request(apiServer)
                 .get('/mobile/get-need-scan')
                 .query({
                     phone_device: flowDevice
@@ -292,7 +261,7 @@ describe('Auto Login API Tests', () => {
             // 使用 Promise.all 并行处理所有请求
             const responses = await Promise.all(
                 testData.map(data =>
-                    request(app)
+                    request(apiServer)
                         .get('/mobile/push-need-login')
                         .query({
                             name: data.name,
@@ -342,7 +311,7 @@ describe('Auto Login API Tests', () => {
             const testDevice = `test_device_${timestamp}_${randomIndex}`;
             
             // 创建一条新记录
-            await request(app)
+            await request(apiServer)
                 .get('/mobile/push-need-login')
                 .query({
                     name: `test_user_${timestamp}_${randomIndex}`,
@@ -350,7 +319,7 @@ describe('Auto Login API Tests', () => {
                 });
 
             // 验证可以获取到该记录
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/pc/get_need_login')
                 .query({
                     phone_device: testDevice
@@ -365,12 +334,12 @@ describe('Auto Login API Tests', () => {
 
     // 测试账号相关API
     describe('Account Management', () => {
-        // 在测试前插入一些测试数据
         beforeEach(async () => {
+            const timestamp = Date.now();
             const testAccount = {
-                phoneNumber: '639123456789',
-                name: 'Test User',
-                lastLogin: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15天前
+                phoneNumber: `639${timestamp}`,
+                name: `Test User ${timestamp}`,
+                lastLogin: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
                 proxy: {
                     host: '72.1.123.123',
                     port: '8080',
@@ -381,16 +350,13 @@ describe('Auto Login API Tests', () => {
 
             await mongoose.connection.db.collection('accounts')
                 .insertOne(testAccount);
-        });
-
-        // 在测试后清理测试数据
-        afterEach(async () => {
-            await mongoose.connection.db.collection('accounts')
-                .deleteMany({});
+            
+            // 保存测试账号信息以供后续测试使用
+            this.testAccount = testAccount;
         });
 
         it('should get inactive accounts with default days', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/accounts/inactive');
 
             expect(response.status).toBe(200);
@@ -411,7 +377,7 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should get inactive accounts with custom days', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/accounts/inactive')
                 .query({ days: 5 });
 
@@ -421,7 +387,7 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should reject invalid days parameter', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/accounts/inactive')
                 .query({ days: 25 }); // 超出范围的值
 
@@ -431,19 +397,18 @@ describe('Auto Login API Tests', () => {
         });
 
         it('should update account last login time', async () => {
-            const testPhone = '639123456789';
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/accounts/update-login')
-                .query({ phoneNumber: testPhone });
+                .query({ phoneNumber: this.testAccount.phoneNumber });
 
             expect(response.status).toBe(200);
             expect(response.body.status).toBe('success');
-            expect(response.body.data).toHaveProperty('phoneNumber', testPhone);
+            expect(response.body.data).toHaveProperty('phoneNumber', this.testAccount.phoneNumber);
             expect(response.body.data).toHaveProperty('lastLogin');
         });
 
         it('should fail to update non-existent account', async () => {
-            const response = await request(app)
+            const response = await request(apiServer)
                 .get('/accounts/update-login')
                 .query({ phoneNumber: 'nonexistent' });
 

@@ -71,7 +71,7 @@
 ### 3. PC端推送扫码需求
 - 接口: /pc/push_need_scan
 - 方法: GET
-- 描述: PC端请求手机扫码，创建扫码记录
+- 描述: PC端请求手机扫码，创建或更新扫码记录
 - 请求参数:
   - name: 字符串，必填，用户名
   - phone_device: 字符串，必填，设备标识
@@ -79,7 +79,7 @@
   - 成功 (200):
     {
         "status": "success",
-        "message": "Successfully inserted scan record for: {name}"
+        "message": "Successfully processed scan record for: {name}"
     }
   - 错误 (400):
     {

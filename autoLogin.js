@@ -207,21 +207,25 @@ class AutoLoginService {
             }
 
             await this.executeWithRetry(async () => {
-                await UserLoginStatus.create({
-                    name,
-                    phone_device,
-                    login_status: 'scan'
-                });
+                await UserLoginStatus.findOneAndUpdate(
+                    { phone_device },
+                    {
+                        name,
+                        phone_device,
+                        login_status: 'scan'
+                    },
+                    { upsert: true, new: true }
+                );
             });
 
-            logger.info(`成功插入扫码记录: name=${name}, phone_device=${phone_device}`);
+            logger.info(`成功处理扫码请求: name=${name}, phone_device=${phone_device}`);
             return res.json({
                 status: "success",
-                message: `Successfully inserted scan record for: ${name}`
+                message: `Successfully processed scan record for: ${name}`
             });
 
         } catch (error) {
-            logger.error(`插入扫码记录失败: ${error.message}`);
+            logger.error(`处理扫码请求失败: ${error.message}`);
             return res.status(500).json({
                 status: "error",
                 message: "Internal server error"
