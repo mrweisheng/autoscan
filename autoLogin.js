@@ -439,6 +439,128 @@ class AutoLoginService {
             });
         }
     }
+
+    async downloadFile(req, res) {
+        try {
+            const { filename } = req.params;
+            
+            if (!filename) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Missing filename parameter"
+                });
+            }
+            
+            // 构建文件路径
+            const filePath = path.join(__dirname, 'uploads', filename);
+            
+            // 检查文件是否存在
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({
+                    status: "error",
+                    message: "File not found"
+                });
+            }
+            
+            // 获取文件信息
+            const stat = fs.statSync(filePath);
+            
+            // 设置响应头
+            res.setHeader('Content-Length', stat.size);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            
+            // 记录下载
+            logger.info(`File download: ${filename}`);
+            
+            // 发送文件
+            const fileStream = fs.createReadStream(filePath);
+            fileStream.pipe(res);
+            
+        } catch (error) {
+            logger.error(`Error in downloadFile: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
+
+    async getFilesByType(req, res) {
+        try {
+            const { type } = req.query;
+            
+            // 验证文件类型
+            if (!type || !['txt', 'vcf'].includes(type.toLowerCase())) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Invalid or missing type parameter. Must be 'txt' or 'vcf'"
+                });
+            }
+            
+            const uploadDir = path.join(__dirname, 'uploads');
+            
+            // 确保目录存在
+            if (!fs.existsSync(uploadDir)) {
+                return res.json({
+                    status: "success",
+                    data: {
+                        files: []
+                    },
+                    message: `No ${type} files found`
+                });
+            }
+            
+            // 读取目录中的所有文件
+            const files = fs.readdirSync(uploadDir);
+            
+            // 过滤指定类型的文件
+            const typeFiles = files.filter(file => {
+                const ext = path.extname(file).toLowerCase();
+                return ext === `.${type.toLowerCase()}`;
+            });
+            
+            // 如果没有找到文件
+            if (typeFiles.length === 0) {
+                return res.json({
+                    status: "success",
+                    data: {
+                        files: []
+                    },
+                    message: `No ${type} files found`
+                });
+            }
+            
+            // 构建文件URL列表
+            const baseUrl = process.env.PUBLIC_URL || `http://${req.headers.host}`;
+            const fileUrls = typeFiles.map(file => {
+                return {
+                    filename: file,
+                    url: `${baseUrl}/uploads/${file}`,
+                    downloadUrl: `${baseUrl}/download/${file}`,
+                    size: fs.statSync(path.join(uploadDir, file)).size
+                };
+            });
+            
+            // 记录请求
+            logger.info(`File list requested for type: ${type}, found ${fileUrls.length} files`);
+            
+            return res.json({
+                status: "success",
+                data: {
+                    files: fileUrls
+                },
+                message: `Found ${fileUrls.length} ${type} files`
+            });
+            
+        } catch (error) {
+            logger.error(`Error in getFilesByType: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
 }
 
 // Express应用实例
@@ -490,6 +612,12 @@ const createServer = async () => {
 
     // 添加文件上传路由
     app.post('/upload', upload.single('file'), (req, res) => autoLoginService.uploadFile(req, res));
+
+    // 在 createServer 函数中添加下载路由
+    app.get('/download/:filename', (req, res) => autoLoginService.downloadFile(req, res));
+
+    // 添加获取文件列表的路由
+    app.get('/files', (req, res) => autoLoginService.getFilesByType(req, res));
 
     return app;
 };

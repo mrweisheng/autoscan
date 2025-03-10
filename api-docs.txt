@@ -205,6 +205,77 @@
         "message": "Internal server error"
     }
 
+### 8. 文件下载
+- 接口: /download/:filename
+- 方法: GET
+- 描述: 下载指定文件名的文件
+- 请求参数:
+  - filename: 字符串，必填，文件名（URL 路径参数）
+- 响应:
+  - 成功: 返回文件内容，设置适当的 Content-Type 和 Content-Disposition 头
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Missing filename parameter"
+    }
+  - 错误 (404):
+    {
+        "status": "error",
+        "message": "File not found"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "Internal server error"
+    }
+
+### 9. 获取文件列表
+- 接口: /files
+- 方法: GET
+- 描述: 根据文件类型获取所有可用文件的URL列表
+- 请求参数:
+  - type: 字符串，必填，文件类型（'txt' 或 'vcf'）
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "files": [
+                {
+                    "filename": "contacts.txt",
+                    "url": "http://104.37.187.30:9000/uploads/contacts.txt",
+                    "downloadUrl": "http://104.37.187.30:9000/download/contacts.txt",
+                    "size": 1024
+                },
+                {
+                    "filename": "contacts2.txt",
+                    "url": "http://104.37.187.30:9000/uploads/contacts2.txt",
+                    "downloadUrl": "http://104.37.187.30:9000/download/contacts2.txt",
+                    "size": 2048
+                }
+            ]
+        },
+        "message": "Found 2 txt files"
+    }
+  - 未找到文件 (200):
+    {
+        "status": "success",
+        "data": {
+            "files": []
+        },
+        "message": "No txt files found"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "Invalid or missing type parameter. Must be 'txt' or 'vcf'"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "Internal server error"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误
