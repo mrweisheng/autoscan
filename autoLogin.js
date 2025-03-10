@@ -2,6 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const winston = require('winston');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // MongoDB配置
 const MONGODB_OPTIONS = {
@@ -59,6 +62,43 @@ const accountSchema = new mongoose.Schema({
 });
 
 const Account = mongoose.model('Account', accountSchema, 'accounts');
+
+// 修改文件存储配置
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, 'uploads');
+        // 确保目录存在
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        // 直接使用原始文件名，不添加时间戳
+        cb(null, file.originalname);
+    }
+});
+
+// 文件过滤器保持不变
+const fileFilter = (req, file, cb) => {
+    const allowedExtensions = ['.txt', '.vcf'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (allowedExtensions.includes(ext)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only .txt and .vcf files are allowed'), false);
+    }
+};
+
+// 修改 multer 配置
+const upload = multer({ 
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 限制文件大小为 5MB
+    }
+});
 
 class DatabaseConnection {
     constructor() {
@@ -365,6 +405,40 @@ class AutoLoginService {
             });
         }
     }
+
+    async uploadFile(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "No file uploaded or file type not allowed"
+                });
+            }
+
+            // 构建文件的公网访问URL，使用原始文件名
+            const baseUrl = process.env.PUBLIC_URL || `http://${req.headers.host}`;
+            const fileUrl = `${baseUrl}/uploads/${req.file.originalname}`;
+
+            logger.info(`File uploaded successfully: ${req.file.originalname}`);
+            return res.json({
+                status: "success",
+                data: {
+                    filename: req.file.originalname,
+                    originalname: req.file.originalname,
+                    size: req.file.size,
+                    url: fileUrl
+                },
+                message: "File uploaded successfully"
+            });
+
+        } catch (error) {
+            logger.error(`Error in uploadFile: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
 }
 
 // Express应用实例
@@ -411,10 +485,71 @@ const createServer = async () => {
         }
     });
 
+    // 添加静态文件服务
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+    // 添加文件上传路由
+    app.post('/upload', upload.single('file'), (req, res) => autoLoginService.uploadFile(req, res));
+
     return app;
 };
 
-// 只在直接运行时启动服务器
+// 添加文件清理函数
+function cleanupOldFiles() {
+    const uploadDir = path.join(__dirname, 'uploads');
+    const cleanupDays = parseInt(process.env.FILE_CLEANUP_DAYS) || 0;
+    
+    // 如果设置为0，表示不删除文件
+    if (cleanupDays === 0) {
+        logger.info('File cleanup disabled (FILE_CLEANUP_DAYS=0)');
+        return;
+    }
+    
+    fs.readdir(uploadDir, (err, files) => {
+        if (err) {
+            logger.error(`Error reading upload directory: ${err.message}`);
+            return;
+        }
+        
+        if (files.length === 0) {
+            logger.info('No files to clean up');
+            return;
+        }
+        
+        const now = Date.now();
+        const maxAge = cleanupDays * 24 * 60 * 60 * 1000; // 转换为毫秒
+        let cleanedCount = 0;
+        
+        files.forEach(file => {
+            const filePath = path.join(uploadDir, file);
+            fs.stat(filePath, (err, stats) => {
+                if (err) {
+                    logger.error(`Error getting file stats: ${err.message}`);
+                    return;
+                }
+                
+                // 如果文件超过最大保存时间，则删除
+                if (now - stats.mtime.getTime() > maxAge) {
+                    fs.unlink(filePath, err => {
+                        if (err) {
+                            logger.error(`Error deleting old file: ${err.message}`);
+                            return;
+                        }
+                        cleanedCount++;
+                        logger.info(`Deleted old file: ${file}`);
+                    });
+                }
+            });
+        });
+        
+        // 记录清理结果
+        setTimeout(() => {
+            logger.info(`File cleanup completed: ${cleanedCount} files deleted`);
+        }, 1000);
+    });
+}
+
+// 在服务器启动时设置定时清理任务
 if (require.main === module) {
     createServer().then(app => {
         const PORT = process.env.PORT || 5000;
@@ -422,6 +557,17 @@ if (require.main === module) {
         
         app.listen(PORT, HOST, () => {
             logger.info(`Server is running on ${HOST}:${PORT}`);
+            
+            // 每天执行一次清理
+            const cleanupDays = parseInt(process.env.FILE_CLEANUP_DAYS) || 0;
+            if (cleanupDays > 0) {
+                logger.info(`File cleanup enabled: files older than ${cleanupDays} days will be deleted daily`);
+                setInterval(cleanupOldFiles, 24 * 60 * 60 * 1000);
+                // 启动时也执行一次清理
+                cleanupOldFiles();
+            } else {
+                logger.info('File cleanup disabled (FILE_CLEANUP_DAYS=0)');
+            }
         });
     }).catch(error => {
         logger.error('Failed to start server:', error);

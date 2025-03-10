@@ -176,6 +176,35 @@
         "message": "Missing phoneNumber parameter"
     }
 
+### 7. 文件上传
+- 接口: /upload
+- 方法: POST
+- 描述: 上传 .txt 或 .vcf 文件，返回可公网访问的下载链接
+- 请求参数:
+  - file: 文件，必填，支持 .txt 和 .vcf 格式
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "filename": "1709123456789-contacts.vcf",
+            "originalname": "contacts.vcf",
+            "size": 1024,
+            "url": "http://104.37.187.30:9000/uploads/1709123456789-contacts.vcf"
+        },
+        "message": "File uploaded successfully"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "No file uploaded or file type not allowed"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "Internal server error"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误
