@@ -442,7 +442,7 @@ class AutoLoginService {
 
     async downloadFile(req, res) {
         try {
-            const { filename } = req.params;
+            let { filename } = req.params;
             
             if (!filename) {
                 return res.status(400).json({
@@ -451,11 +451,22 @@ class AutoLoginService {
                 });
             }
             
+            // 尝试解码 URL 编码的文件名
+            try {
+                filename = decodeURIComponent(filename);
+            } catch (e) {
+                logger.warn(`Failed to decode filename: ${filename}, ${e.message}`);
+                // 继续使用原始文件名
+            }
+            
+            logger.info(`Download request for file: ${filename}`);
+            
             // 构建文件路径
             const filePath = path.join(__dirname, 'uploads', filename);
             
             // 检查文件是否存在
             if (!fs.existsSync(filePath)) {
+                logger.warn(`File not found: ${filePath}`);
                 return res.status(404).json({
                     status: "error",
                     message: "File not found"
@@ -467,15 +478,26 @@ class AutoLoginService {
             
             // 设置响应头
             res.setHeader('Content-Length', stat.size);
-            res.setHeader('Content-Type', 'application/octet-stream');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            
+            // 根据文件扩展名设置正确的 Content-Type
+            const ext = path.extname(filename).toLowerCase();
+            if (ext === '.txt') {
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            } else if (ext === '.vcf') {
+                res.setHeader('Content-Type', 'text/vcard');
+            } else {
+                res.setHeader('Content-Type', 'application/octet-stream');
+            }
+            
+            // 设置下载文件名，处理中文文件名
+            const encodedFilename = encodeURIComponent(filename);
+            res.setHeader('Content-Disposition', `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`);
             
             // 记录下载
-            logger.info(`File download: ${filename}`);
+            logger.info(`Sending file: ${filename}, size: ${stat.size} bytes`);
             
             // 发送文件
-            const fileStream = fs.createReadStream(filePath);
-            fileStream.pipe(res);
+            fs.createReadStream(filePath).pipe(res);
             
         } catch (error) {
             logger.error(`Error in downloadFile: ${error.message}`);
