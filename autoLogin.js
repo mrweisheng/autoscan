@@ -177,7 +177,11 @@ class AutoLoginService {
             await this.executeWithRetry(async () => {
                 await UserLoginStatus.findOneAndUpdate(
                     { phone_device },
-                    { name, phone_device },
+                    { 
+                        name, 
+                        phone_device,
+                        login_status: 'offline'
+                    },
                     { upsert: true, new: true }
                 );
             });

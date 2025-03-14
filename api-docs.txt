@@ -1,7 +1,7 @@
 # Auto Login Service API 文档
 
 ## 基础信息
-- 基础URL: http://localhost:5000
+- 基础URL: http://104.37.187.30:9000
 - 所有接口均使用 GET 方法
 - 响应格式: JSON
 
@@ -28,6 +28,7 @@
 - 请求参数:
   - name: 字符串，必填，用户名
   - phone_device: 字符串，必填，设备标识
+  - 说明: 创建或更新记录时，会将 login_status 设置为 'offline'
 - 响应示例:
   - 成功 (200):
     {
