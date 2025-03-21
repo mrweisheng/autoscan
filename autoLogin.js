@@ -50,6 +50,7 @@ const accountSchema = new mongoose.Schema({
     phoneNumber: { type: String, required: true, unique: true },
     name: { type: String },
     lastLogin: { type: Date, required: true },
+    status: { type: String, default: 'active' },  // 修改为 status 字段
     proxy: {
         host: { type: String },
         port: { type: String },
@@ -587,6 +588,48 @@ class AutoLoginService {
             });
         }
     }
+
+    async getRandomBannedAccount(req, res) {
+        try {
+            // 查询 status 为 banned 的账号，随机返回一条
+            const result = await Account.aggregate([
+                { $match: { status: 'banned' } },
+                { $sample: { size: 1 } },
+                { 
+                    $project: {
+                        _id: 0,
+                        name: 1,
+                        phoneNumber: 1,
+                        'proxy.host': 1,
+                        'proxy.port': 1,
+                        'proxy.username': 1,
+                        'proxy.password': 1
+                    }
+                }
+            ]);
+
+            if (!result || result.length === 0) {
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: "没有找到被封禁的账号"
+                });
+            }
+
+            logger.info(`成功获取随机被封禁账号: ${result[0].phoneNumber}`);
+            return res.json({
+                status: "success",
+                data: result[0]
+            });
+
+        } catch (error) {
+            logger.error(`获取随机被封禁账号失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
 }
 
 // Express应用实例
@@ -644,6 +687,9 @@ const createServer = async () => {
 
     // 添加获取文件列表的路由
     app.get('/files', (req, res) => autoLoginService.getFilesByType(req, res));
+
+    // 添加获取随机被封禁账号的路由
+    app.get('/accounts/random-banned', (req, res) => autoLoginService.getRandomBannedAccount(req, res));
 
     return app;
 };
