@@ -147,6 +147,12 @@ class DatabaseConnection {
 class AutoLoginService {
     constructor() {
         this.db = new DatabaseConnection();
+        // 添加缓存相关属性
+        this.bannedAccountsCache = [];  // 缓存的被封禁账号列表
+        this.cacheIndex = 0;           // 当前的指针位置
+        this.cacheTimestamp = 0;       // 缓存创建时间
+        this.cacheMaxAge = 1000 * 60 * 60; // 缓存有效期：1小时
+        this.cacheExhausted = false;   // 标记缓存是否已耗尽
     }
 
     async executeWithRetry(operation, maxRetries = 3) {
@@ -592,25 +598,38 @@ class AutoLoginService {
 
     async getRandomBannedAccount(req, res) {
         try {
-            // 查询条件：status 为 banned 且 isHandle 为 false 的账号
-            const result = await Account.findOne(
-                { 
-                    status: 'banned',
-                    isHandle: false  // 使用布尔值 false
-                },
-                { 
-                    _id: 0,
-                    name: 1,
-                    phoneNumber: 1,
-                    'proxy.host': 1,
-                    'proxy.port': 1,
-                    'proxy.username': 1,
-                    'proxy.password': 1
-                }
-            ).sort({ _id: 1 }); // 根据 _id 排序
+            const now = Date.now();
+            
+            // 检查缓存是否过期或为空
+            if (this.bannedAccountsCache.length === 0 || now - this.cacheTimestamp > this.cacheMaxAge) {
+                // 缓存过期或为空，重新查询数据库并重置指针
+                logger.info('重新加载被封禁账号缓存');
+                
+                this.bannedAccountsCache = await Account.find(
+                    { 
+                        status: 'banned',
+                        isHandle: false
+                    },
+                    { 
+                        _id: 0,
+                        name: 1,
+                        phoneNumber: 1,
+                        'proxy.host': 1,
+                        'proxy.port': 1,
+                        'proxy.username': 1,
+                        'proxy.password': 1
+                    }
+                ).sort({ _id: 1 }).exec();  // 按_id排序
+                
+                this.cacheIndex = 0;
+                this.cacheTimestamp = now;
+                this.cacheExhausted = false;
+                
+                logger.info(`缓存加载了 ${this.bannedAccountsCache.length} 个被封禁账号`);
+            }
 
-            // 如果没有找到符合条件的数据
-            if (!result) {
+            // 如果缓存中没有数据
+            if (this.bannedAccountsCache.length === 0) {
                 return res.status(404).json({
                     status: "success",
                     data: null,
@@ -618,14 +637,45 @@ class AutoLoginService {
                 });
             }
 
-            logger.info(`成功获取随机被封禁账号: ${result.phoneNumber}`);
+            // 如果缓存已用完
+            if (this.cacheExhausted) {
+                // 计算缓存过期还需要的时间（分钟）
+                const remainingMinutes = Math.ceil((this.cacheTimestamp + this.cacheMaxAge - now) / (1000 * 60));
+                
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: `当前时段的所有账号已被获取完毕，请在 ${remainingMinutes} 分钟后再试`
+                });
+            }
+
+            // 如果当前指针已到达缓存末尾
+            if (this.cacheIndex >= this.bannedAccountsCache.length) {
+                this.cacheExhausted = true;
+                // 计算缓存过期还需要的时间（分钟）
+                const remainingMinutes = Math.ceil((this.cacheTimestamp + this.cacheMaxAge - now) / (1000 * 60));
+                
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: `当前时段的所有账号已被获取完毕，请在 ${remainingMinutes} 分钟后再试`
+                });
+            }
+
+            // 获取当前指针位置的账号
+            const result = this.bannedAccountsCache[this.cacheIndex];
+            
+            // 更新指针位置，不循环
+            this.cacheIndex++;
+            
+            logger.info(`成功获取被封禁账号: ${result.phoneNumber}，缓存位置: ${this.cacheIndex - 1}/${this.bannedAccountsCache.length - 1}`);
             return res.json({
                 status: "success",
                 data: result
             });
 
         } catch (error) {
-            logger.error(`获取随机被封禁账号失败: ${error.message}`);
+            logger.error(`获取被封禁账号失败: ${error.message}`);
             return res.status(500).json({
                 status: "error",
                 message: "服务器内部错误"
