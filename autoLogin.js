@@ -146,6 +146,12 @@ class DatabaseConnection {
 
 class AutoLoginService {
     constructor() {
+        if (AutoLoginService.instance) {
+            logger.info("返回已存在的 AutoLoginService 实例");
+            return AutoLoginService.instance;
+        }
+        
+        logger.info("创建新的 AutoLoginService 实例");
         this.db = new DatabaseConnection();
         // 添加缓存相关属性
         this.bannedAccountsCache = [];  // 缓存的被封禁账号列表
@@ -153,6 +159,9 @@ class AutoLoginService {
         this.cacheTimestamp = 0;       // 缓存创建时间
         this.cacheMaxAge = 1000 * 60 * 60; // 缓存有效期：1小时
         this.cacheExhausted = false;   // 标记缓存是否已耗尽
+        this.processingRequest = false; // 请求处理锁，防止并发访问导致的问题
+        
+        AutoLoginService.instance = this;
     }
 
     async executeWithRetry(operation, maxRetries = 3) {
@@ -597,13 +606,25 @@ class AutoLoginService {
     }
 
     async getRandomBannedAccount(req, res) {
+        // 生成请求ID和时间戳，用于日志和调试
+        const now = Date.now();
+        const requestId = Math.random().toString(36).substring(2, 10);
+        logger.info(`[${requestId}] 接收到获取被封禁账号请求`);
+        
         try {
-            const now = Date.now();
+            // 并发请求处理 - 如果有请求正在处理，等待它完成
+            while (this.processingRequest) {
+                logger.info(`[${requestId}] 等待其他请求处理完成`);
+                await new Promise(resolve => setTimeout(resolve, 50)); // 等待50ms后再检查
+            }
+            
+            // 标记正在处理请求
+            this.processingRequest = true;
             
             // 检查缓存是否过期或为空
             if (this.bannedAccountsCache.length === 0 || now - this.cacheTimestamp > this.cacheMaxAge) {
                 // 缓存过期或为空，重新查询数据库并重置指针
-                logger.info('重新加载被封禁账号缓存');
+                logger.info(`[${requestId}] 重新加载被封禁账号缓存 - 原因: ${this.bannedAccountsCache.length === 0 ? '缓存为空' : '缓存过期'}`);
                 
                 this.bannedAccountsCache = await Account.find(
                     { 
@@ -625,11 +646,15 @@ class AutoLoginService {
                 this.cacheTimestamp = now;
                 this.cacheExhausted = false;
                 
-                logger.info(`缓存加载了 ${this.bannedAccountsCache.length} 个被封禁账号`);
+                logger.info(`[${requestId}] 缓存加载了 ${this.bannedAccountsCache.length} 个被封禁账号`);
+            } else {
+                logger.info(`[${requestId}] 使用现有缓存, 当前索引: ${this.cacheIndex}/${this.bannedAccountsCache.length}, 缓存状态: ${this.cacheExhausted ? '已耗尽' : '可用'}`);
             }
 
             // 如果缓存中没有数据
             if (this.bannedAccountsCache.length === 0) {
+                logger.info(`[${requestId}] 没有找到可用的被封禁账号`);
+                this.processingRequest = false; // 释放锁
                 return res.status(404).json({
                     status: "success",
                     data: null,
@@ -641,7 +666,8 @@ class AutoLoginService {
             if (this.cacheExhausted) {
                 // 计算缓存过期还需要的时间（分钟）
                 const remainingMinutes = Math.ceil((this.cacheTimestamp + this.cacheMaxAge - now) / (1000 * 60));
-                
+                logger.info(`[${requestId}] 缓存已耗尽，还需等待 ${remainingMinutes} 分钟后刷新`);
+                this.processingRequest = false; // 释放锁
                 return res.status(404).json({
                     status: "success",
                     data: null,
@@ -654,7 +680,8 @@ class AutoLoginService {
                 this.cacheExhausted = true;
                 // 计算缓存过期还需要的时间（分钟）
                 const remainingMinutes = Math.ceil((this.cacheTimestamp + this.cacheMaxAge - now) / (1000 * 60));
-                
+                logger.info(`[${requestId}] 缓存索引到达末尾，设置为已耗尽，还需等待 ${remainingMinutes} 分钟后刷新`);
+                this.processingRequest = false; // 释放锁
                 return res.status(404).json({
                     status: "success",
                     data: null,
@@ -664,18 +691,21 @@ class AutoLoginService {
 
             // 获取当前指针位置的账号
             const result = this.bannedAccountsCache[this.cacheIndex];
+            const currentIndex = this.cacheIndex;
             
             // 更新指针位置，不循环
             this.cacheIndex++;
             
-            logger.info(`成功获取被封禁账号: ${result.phoneNumber}，缓存位置: ${this.cacheIndex - 1}/${this.bannedAccountsCache.length - 1}`);
+            logger.info(`[${requestId}] 成功获取被封禁账号: ${result.phoneNumber}，缓存位置: ${currentIndex}/${this.bannedAccountsCache.length - 1}，更新索引至: ${this.cacheIndex}`);
+            this.processingRequest = false; // 释放锁
             return res.json({
                 status: "success",
                 data: result
             });
 
         } catch (error) {
-            logger.error(`获取被封禁账号失败: ${error.message}`);
+            logger.error(`[${requestId}] 获取被封禁账号失败: ${error.message}`);
+            this.processingRequest = false; // 确保错误情况下也释放锁
             return res.status(500).json({
                 status: "error",
                 message: "服务器内部错误"
@@ -732,6 +762,9 @@ class AutoLoginService {
     }
 }
 
+// 在类外部添加静态实例属性
+AutoLoginService.instance = null;
+
 // Express应用实例
 const app = express();
 
@@ -740,7 +773,9 @@ const createServer = async () => {
     // 确保数据库连接已建立
     await DatabaseConnection.getInstance();
     
+    // 使用单例模式创建服务实例
     const autoLoginService = new AutoLoginService();
+    logger.info("服务器启动时创建的 AutoLoginService 实例");
 
     // 路由定义
     app.get('/mobile/push-need-login', (req, res) => autoLoginService.mobilePushNeedLogin(req, res));
@@ -793,6 +828,28 @@ const createServer = async () => {
 
     // 添加标记账号处理成功的路由
     app.get('/accounts/mark-handled', (req, res) => autoLoginService.markAccountAsHandled(req, res));
+
+    // 在路由定义部分添加一个测试路由
+    app.get('/test/cache-status', (req, res) => {
+        const now = Date.now();
+        const status = {
+            cacheLength: autoLoginService.bannedAccountsCache.length,
+            currentIndex: autoLoginService.cacheIndex,
+            cacheTimestamp: autoLoginService.cacheTimestamp,
+            cacheExhausted: autoLoginService.cacheExhausted,
+            processingRequest: autoLoginService.processingRequest,
+            timeRemaining: Math.max(0, autoLoginService.cacheTimestamp + autoLoginService.cacheMaxAge - now),
+            remainingMinutes: Math.ceil(Math.max(0, autoLoginService.cacheTimestamp + autoLoginService.cacheMaxAge - now) / (1000 * 60)),
+            instanceInfo: autoLoginService.constructor.name + '-' + Date.now().toString().slice(-4)
+        };
+        
+        logger.info(`缓存状态请求: ${JSON.stringify(status)}`);
+        
+        return res.json({
+            status: "success",
+            data: status
+        });
+    });
 
     return app;
 };
@@ -854,26 +911,34 @@ function cleanupOldFiles() {
 
 // 在服务器启动时设置定时清理任务
 if (require.main === module) {
+    // 定义存储服务器实例的变量
+    let serverInstance = null;
+    
     createServer().then(app => {
         const PORT = process.env.PORT || 5000;
         const HOST = process.env.HOST || '0.0.0.0';
         
-        app.listen(PORT, HOST, () => {
-            logger.info(`Server is running on ${HOST}:${PORT}`);
-            
-            // 每天执行一次清理
-            const cleanupDays = parseInt(process.env.FILE_CLEANUP_DAYS) || 0;
-            if (cleanupDays > 0) {
-                logger.info(`File cleanup enabled: files older than ${cleanupDays} days will be deleted daily`);
-                setInterval(cleanupOldFiles, 24 * 60 * 60 * 1000);
-                // 启动时也执行一次清理
-                cleanupOldFiles();
-            } else {
-                logger.info('File cleanup disabled (FILE_CLEANUP_DAYS=0)');
-            }
-        });
+        // 确保只有一个服务器实例在运行
+        if (!serverInstance) {
+            serverInstance = app.listen(PORT, HOST, () => {
+                logger.info(`服务器实例已启动并监听 ${HOST}:${PORT}`);
+                
+                // 每天执行一次清理
+                const cleanupDays = parseInt(process.env.FILE_CLEANUP_DAYS) || 0;
+                if (cleanupDays > 0) {
+                    logger.info(`文件清理已启用: ${cleanupDays} 天前的文件将被每日删除`);
+                    setInterval(cleanupOldFiles, 24 * 60 * 60 * 1000);
+                    // 启动时也执行一次清理
+                    cleanupOldFiles();
+                } else {
+                    logger.info('文件清理已禁用 (FILE_CLEANUP_DAYS=0)');
+                }
+            });
+        } else {
+            logger.info(`服务器实例已存在，跳过重复启动`);
+        }
     }).catch(error => {
-        logger.error('Failed to start server:', error);
+        logger.error('启动服务器失败:', error);
         process.exit(1);
     });
 }
