@@ -51,6 +51,7 @@ const accountSchema = new mongoose.Schema({
     name: { type: String },
     lastLogin: { type: Date, required: true },
     status: { type: String, default: 'active' },  // 修改为 status 字段
+    isHandle: { type: Boolean, default: false },  // 改回布尔类型
     proxy: {
         host: { type: String },
         port: { type: String },
@@ -591,39 +592,88 @@ class AutoLoginService {
 
     async getRandomBannedAccount(req, res) {
         try {
-            // 查询 status 为 banned 的账号，随机返回一条
-            const result = await Account.aggregate([
-                { $match: { status: 'banned' } },
-                { $sample: { size: 1 } },
+            // 查询条件：status 为 banned 且 isHandle 为 false 的账号
+            const result = await Account.findOne(
                 { 
-                    $project: {
-                        _id: 0,
-                        name: 1,
-                        phoneNumber: 1,
-                        'proxy.host': 1,
-                        'proxy.port': 1,
-                        'proxy.username': 1,
-                        'proxy.password': 1
-                    }
+                    status: 'banned',
+                    isHandle: false  // 使用布尔值 false
+                },
+                { 
+                    _id: 0,
+                    name: 1,
+                    phoneNumber: 1,
+                    'proxy.host': 1,
+                    'proxy.port': 1,
+                    'proxy.username': 1,
+                    'proxy.password': 1
                 }
-            ]);
+            ).sort({ _id: 1 }); // 根据 _id 排序
 
-            if (!result || result.length === 0) {
+            // 如果没有找到符合条件的数据
+            if (!result) {
                 return res.status(404).json({
                     status: "success",
                     data: null,
-                    message: "没有找到被封禁的账号"
+                    message: "没有找到可用的被封禁账号"
                 });
             }
 
-            logger.info(`成功获取随机被封禁账号: ${result[0].phoneNumber}`);
+            logger.info(`成功获取随机被封禁账号: ${result.phoneNumber}`);
             return res.json({
                 status: "success",
-                data: result[0]
+                data: result
             });
 
         } catch (error) {
             logger.error(`获取随机被封禁账号失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
+
+    async markAccountAsHandled(req, res) {
+        try {
+            const { phoneNumber } = req.query;
+
+            if (!phoneNumber) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "缺少必填参数: phoneNumber"
+                });
+            }
+
+            const result = await Account.findOneAndUpdate(
+                { 
+                    phoneNumber
+                },
+                { 
+                    $set: { isHandle: true } 
+                },
+                { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
+            );
+
+            if (!result) {
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: "未找到该账号"
+                });
+            }
+
+            logger.info(`成功标记账号处理状态: ${phoneNumber}, isHandle=true`);
+            return res.json({
+                status: "success",
+                data: {
+                    phoneNumber: result.phoneNumber,
+                    isHandle: result.isHandle
+                },
+                message: "账号标记为已处理"
+            });
+
+        } catch (error) {
+            logger.error(`标记账号处理状态失败: ${error.message}`);
             return res.status(500).json({
                 status: "error",
                 message: "服务器内部错误"
@@ -690,6 +740,9 @@ const createServer = async () => {
 
     // 添加获取随机被封禁账号的路由
     app.get('/accounts/random-banned', (req, res) => autoLoginService.getRandomBannedAccount(req, res));
+
+    // 添加标记账号处理成功的路由
+    app.get('/accounts/mark-handled', (req, res) => autoLoginService.markAccountAsHandled(req, res));
 
     return app;
 };

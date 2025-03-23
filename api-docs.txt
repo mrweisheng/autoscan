@@ -277,6 +277,71 @@
         "message": "Internal server error"
     }
 
+### 10. 获取随机被封禁账号
+- 接口: /accounts/random-banned
+- 方法: GET
+- 描述: 随机获取一个状态为 banned 且 isHandle 为 false 的账号，不会修改账号状态
+- 请求参数: 无
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "name": "用户名",
+            "phoneNumber": "手机号码",
+            "proxy": {
+                "host": "代理主机",
+                "port": "代理端口",
+                "username": "代理用户名",
+                "password": "代理密码"
+            }
+        }
+    }
+  - 未找到记录 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "没有找到可用的被封禁账号"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
+### 11. 标记账号处理成功
+- 接口: /accounts/mark-handled
+- 方法: GET
+- 描述: 将指定账号的 isHandle 状态设置为 true
+- 请求参数:
+  - phoneNumber: 字符串，必填，手机号码
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "phoneNumber": "手机号码",
+            "isHandle": true
+        },
+        "message": "账号标记为已处理"
+    }
+  - 未找到记录 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "未找到该账号"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必填参数: phoneNumber"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误
