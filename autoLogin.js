@@ -713,6 +713,44 @@ class AutoLoginService {
         }
     }
 
+    async getAccountsByStatus(req, res) {
+        try {
+            const { status } = req.query;
+
+            // 验证status参数
+            if (!status || !['banned', 'online', 'offline', 'logout'].includes(status)) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Invalid status parameter. Must be one of: banned, online, offline, logout"
+                });
+            }
+
+            // 查询数据库
+            const accounts = await Account.find(
+                { status },
+                { 
+                    _id: 0,
+                    name: 1,
+                    phoneNumber: 1
+                }
+            ).sort({ phoneNumber: 1 }).exec();
+
+            logger.info(`Found ${accounts.length} accounts with status: ${status}`);
+            return res.json({
+                status: "success",
+                data: accounts,
+                totalCount: accounts.length
+            });
+
+        } catch (error) {
+            logger.error(`Error in getAccountsByStatus: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
+
     async markAccountAsHandled(req, res) {
         try {
             const { phoneNumber } = req.query;
@@ -825,6 +863,9 @@ const createServer = async () => {
 
     // 添加获取随机被封禁账号的路由
     app.get('/accounts/random-banned', (req, res) => autoLoginService.getRandomBannedAccount(req, res));
+
+    // 添加根据状态查询账号的路由
+    app.get('/accounts/by-status', (req, res) => autoLoginService.getAccountsByStatus(req, res));
 
     // 添加标记账号处理成功的路由
     app.get('/accounts/mark-handled', (req, res) => autoLoginService.markAccountAsHandled(req, res));
@@ -946,4 +987,4 @@ if (require.main === module) {
 module.exports = {
     createServer,
     logger
-}; 
+};
