@@ -804,14 +804,36 @@ class AutoLoginService {
             }
             
             const productWorksheet = workbook.Sheets[productSheetName];
-            const products = XLSX.utils.sheet_to_json(productWorksheet).map(row => ({
-                shopType: row['店铺类型'] || '',
-                productName: row['商品名称'] || '',
-                originalPrice: row['商品价格'] || 0,
-                discountPrice: row['优惠价格'] || 0,
-                imageUrl: row['商品图片'] || '',
-                productDescription: row['商品简介'] || ''
-            }));
+            // 处理商品数据并提取图片
+            const products = [];
+            const rows = XLSX.utils.sheet_to_json(productWorksheet);
+            
+            for (const row of rows) {
+                let imageUrl = '';
+                
+                // 处理图片字段
+                if (row['商品图片'] && typeof row['商品图片'] === 'string') {
+                    // 如果是普通URL则直接使用
+                    if (row['商品图片'].startsWith('http')) {
+                        imageUrl = row['商品图片'];
+                    } else {
+                        // 处理特殊格式的图片引用
+                        const match = row['商品图片'].match(/DISPIMG\("([^"]+)"/);
+                        if (match && match[1]) {
+                            imageUrl = `/uploads/images/${match[1]}.jpg`;
+                        }
+                    }
+                }
+
+                products.push({
+                    shopType: row['店铺类型'] || '',
+                    productName: row['商品名称'] || '',
+                    originalPrice: row['商品价格'] || 0,
+                    discountPrice: row['优惠价格'] || 0,
+                    imageUrl: imageUrl,
+                    productDescription: row['商品简介'] || ''
+                });
+            }
 
             // 验证数据
             if (shops.length === 0 || products.length === 0) {
@@ -819,6 +841,23 @@ class AutoLoginService {
                     status: "error",
                     message: "Excel文件中没有有效数据"
                 });
+            }
+
+            // 创建图片目录
+            const imagesDir = path.join(__dirname, 'uploads', 'images');
+            if (!fs.existsSync(imagesDir)) {
+                fs.mkdirSync(imagesDir, { recursive: true });
+            }
+
+            // 提取并保存图片
+            for (const [index, row] of rows.entries()) {
+                if (row['商品图片'] && typeof row['商品图片'] === 'object') {
+                    // 处理Excel内嵌图片
+                    const imageId = `product_${Date.now()}_${index}`;
+                    const imagePath = path.join(imagesDir, `${imageId}.jpg`);
+                    fs.writeFileSync(imagePath, row['商品图片']);
+                    products[index].imageUrl = `/uploads/images/${imageId}.jpg`;
+                }
             }
 
             // 批量插入数据 - 先插入店铺，再插入商品
