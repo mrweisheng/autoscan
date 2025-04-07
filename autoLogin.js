@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const winston = require('winston');
 const multer = require('multer');
+const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 
@@ -83,13 +84,13 @@ const storage = multer.diskStorage({
 
 // 文件过滤器保持不变
 const fileFilter = (req, file, cb) => {
-    const allowedExtensions = ['.txt', '.vcf'];
+    const allowedExtensions = ['.txt', '.vcf', '.xlsx'];
     const ext = path.extname(file.originalname).toLowerCase();
     
     if (allowedExtensions.includes(ext)) {
         cb(null, true);
     } else {
-        cb(new Error('Only .txt and .vcf files are allowed'), false);
+        cb(new Error('Only .txt, .vcf and .xlsx files are allowed'), false);
     }
 };
 
@@ -752,6 +753,95 @@ class AutoLoginService {
     }
 
     async markAccountAsHandled(req, res) {
+    }
+
+    async importShopData(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "No file uploaded"
+                });
+            }
+
+            const filePath = path.join(__dirname, 'uploads', req.file.originalname);
+            
+            // 检查文件是否存在
+            if (!fs.existsSync(filePath)) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Uploaded file not found"
+                });
+            }
+
+            // 解析Excel文件
+            const workbook = XLSX.readFile(filePath);
+            
+            // 处理店铺资料sheet
+            const shopSheetName = workbook.SheetNames.find(name => name.includes('店铺资料'));
+            if (!shopSheetName) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Excel文件中缺少店铺资料sheet"
+                });
+            }
+            
+            const shopWorksheet = workbook.Sheets[shopSheetName];
+            const shops = XLSX.utils.sheet_to_json(shopWorksheet).map(row => ({
+                shopType: row['店铺类型'] || '',
+                shopAddress: row['店铺地址'] || '',
+                shopDescription: row['店铺简介'] || '',
+                shopLink: row['店铺链接'] || ''
+            }));
+
+            // 处理商品sheet
+            const productSheetName = workbook.SheetNames.find(name => name.includes('商品'));
+            if (!productSheetName) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Excel文件中缺少商品sheet"
+                });
+            }
+            
+            const productWorksheet = workbook.Sheets[productSheetName];
+            const products = XLSX.utils.sheet_to_json(productWorksheet).map(row => ({
+                shopType: row['店铺类型'] || '',
+                productName: row['商品名称'] || '',
+                originalPrice: row['商品价格'] || 0,
+                discountPrice: row['优惠价格'] || 0,
+                imageUrl: row['商品图片'] || '',
+                productDescription: row['商品简介'] || ''
+            }));
+
+            // 验证数据
+            if (shops.length === 0 || products.length === 0) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Excel文件中没有有效数据"
+                });
+            }
+
+            // 批量插入数据 - 先插入店铺，再插入商品
+            await Shop.insertMany(shops);
+            await ShopProduct.insertMany(products);
+
+            logger.info(`成功导入 ${shops.length} 家店铺和 ${products.length} 件商品`);
+            return res.json({
+                status: "success",
+                data: {
+                    shopCount: shops.length,
+                    productCount: products.length
+                },
+                message: "店铺和商品数据导入成功"
+            });
+
+        } catch (error) {
+            logger.error(`导入店铺数据失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
         try {
             const { phoneNumber } = req.query;
 
@@ -799,6 +889,35 @@ class AutoLoginService {
         }
     }
 }
+
+// 添加ShopProduct模型定义
+// 店铺模型
+const shopSchema = new mongoose.Schema({
+    shopType: { type: String, required: true, index: true },
+    shopAddress: { type: String, required: true },
+    shopDescription: { type: String },
+    shopLink: { type: String, required: true }
+}, { 
+    timestamps: true,
+    versionKey: false
+});
+
+const Shop = mongoose.model('Shop', shopSchema, 'shops');
+
+// 商品模型
+const shopProductSchema = new mongoose.Schema({
+    shopType: { type: String, required: true, index: true },
+    productName: { type: String, required: true },
+    originalPrice: { type: Number, required: true },
+    discountPrice: { type: Number, required: true },
+    imageUrl: { type: String, required: true },
+    productDescription: { type: String }
+}, { 
+    timestamps: true,
+    versionKey: false
+});
+
+const ShopProduct = mongoose.model('ShopProduct', shopProductSchema, 'shop_products');
 
 // 在类外部添加静态实例属性
 AutoLoginService.instance = null;
@@ -869,6 +988,9 @@ const createServer = async () => {
 
     // 添加标记账号处理成功的路由
     app.get('/accounts/mark-handled', (req, res) => autoLoginService.markAccountAsHandled(req, res));
+
+    // 添加导入店铺数据路由
+    app.post('/import/shop-data', upload.single('file'), (req, res) => autoLoginService.importShopData(req, res));
 
     // 在路由定义部分添加一个测试路由
     app.get('/test/cache-status', (req, res) => {
