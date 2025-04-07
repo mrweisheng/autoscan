@@ -1,6 +1,8 @@
 # 环境变量
 .env
-
+店铺.xlsx
+# 忽略 Excel 临时文件
+~$*.xlsx
 # 日志
 *.log
 
