@@ -812,18 +812,7 @@ class AutoLoginService {
                 let imageUrl = '';
                 
                 // 处理图片字段
-                if (row['商品图片'] && typeof row['商品图片'] === 'string') {
-                    // 如果是普通URL则直接使用
-                    if (row['商品图片'].startsWith('http')) {
-                        imageUrl = row['商品图片'];
-                    } else {
-                        // 处理特殊格式的图片引用
-                        const match = row['商品图片'].match(/DISPIMG\("([^"]+)"/);
-                        if (match && match[1]) {
-                            imageUrl = `/uploads/images/${match[1]}.jpg`;
-                        }
-                    }
-                }
+                // 跳过URL格式的图片，只处理内嵌图片
 
                 products.push({
                     shopType: row['店铺类型'] || '',
@@ -962,7 +951,7 @@ const shopProductSchema = new mongoose.Schema({
         required: true,
         validate: {
             validator: function(v) {
-                return v.startsWith('data:image/');
+                return v.startsWith('data:image/') && v.includes(';base64,');
             },
             message: props => `${props.value} 不是有效的base64图片数据`
         }
