@@ -849,14 +849,22 @@ class AutoLoginService {
                 fs.mkdirSync(imagesDir, { recursive: true });
             }
 
-            // 提取并保存图片
-            for (const [index, row] of rows.entries()) {
-                if (row['商品图片'] && typeof row['商品图片'] === 'object') {
-                    // 处理Excel内嵌图片
-                    const imageId = `product_${Date.now()}_${index}`;
-                    const imagePath = path.join(imagesDir, `${imageId}.jpg`);
-                    fs.writeFileSync(imagePath, row['商品图片']);
-                    products[index].imageUrl = `/uploads/images/${imageId}.jpg`;
+            // 提取图片并转为base64
+            const rawData = XLSX.utils.sheet_to_json(productWorksheet, { raw: true });
+            for (let i = 0; i < rawData.length; i++) {
+                const row = rawData[i];
+                if (row['商品图片'] && workbook.Sheets[productSheetName]['!images']) {
+                    const images = workbook.Sheets[productSheetName]['!images'];
+                    const image = images.find(img => 
+                        img.ref.includes(`商品图片`) && 
+                        img.ref.includes(`R${i+2}`)
+                    );
+                    
+                    if (image) {
+                        const base64Data = image.data.toString('base64');
+                        const mimeType = image.type || 'image/jpeg';
+                        products[i].imageUrl = `data:${mimeType};base64,${base64Data}`;
+                    }
                 }
             }
 
@@ -949,7 +957,16 @@ const shopProductSchema = new mongoose.Schema({
     productName: { type: String, required: true },
     originalPrice: { type: Number, required: true },
     discountPrice: { type: Number, required: true },
-    imageUrl: { type: String, required: true },
+    imageUrl: { 
+        type: String, 
+        required: true,
+        validate: {
+            validator: function(v) {
+                return v.startsWith('data:image/');
+            },
+            message: props => `${props.value} 不是有效的base64图片数据`
+        }
+    },
     productDescription: { type: String }
 }, { 
     timestamps: true,
