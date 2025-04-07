@@ -99,7 +99,7 @@ const upload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-        fileSize: 5 * 1024 * 1024 // 限制文件大小为 5MB
+        fileSize: 20 * 1024 * 1024 // 限制文件大小为 20MB
     }
 });
 
