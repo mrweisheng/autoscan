@@ -348,6 +348,83 @@
         "message": "服务器内部错误"
     }
 
+### 12. 图片上传
+- 接口: /upload/image
+- 方法: POST
+- 描述: 上传图片文件，支持jpg、png、gif等常见图片格式，返回可公网访问的URL和下载链接
+- 请求参数:
+  - file: 文件，必填，支持的图片格式：jpg、jpeg、png、gif、webp
+  - maxSize: 10MB
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "filename": "1709123456789-photo.jpg",
+            "originalname": "photo.jpg",
+            "size": 1024,
+            "width": 800,
+            "height": 600,
+            "type": "image/jpeg",
+            "url": "http://104.37.187.30:9000/uploads/images/1709123456789-photo.jpg",
+            "downloadUrl": "http://104.37.187.30:9000/download/1709123456789-photo.jpg"
+        },
+        "message": "Image uploaded successfully"
+    }
+  - 错误 (400):
+    {
+        "status": "error",
+        "message": "No image uploaded or image type not allowed"
+    }
+  - 错误 (413):
+    {
+        "status": "error",
+        "message": "Image size exceeds 10MB limit"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "Internal server error"
+    }
+
+### 10. 获取被封禁账号
+- 接口: /accounts/random-banned
+- 方法: GET
+- 描述: 顺序获取一个状态为 banned 且 isHandle 为 false 的账号，不会修改账号状态。采用单例模式确保缓存和索引共享，防止重复返回账号。服务器会缓存所有符合条件的账号，并严格按顺序返回，同一缓存期内绝不返回重复账号。缓存有效期为1小时，当所有缓存账号均被返回后，返回data为null并提示等待时间。同时采用锁机制处理并发请求，确保索引严格递增。
+- 请求参数: 无
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "name": "用户名",
+            "phoneNumber": "手机号码",
+            "proxy": {
+                "host": "代理主机",
+                "port": "代理端口",
+                "username": "代理用户名",
+                "password": "代理密码"
+            }
+        }
+    }
+  - 未找到记录 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "没有找到可用的被封禁账号"
+    }
+  - 缓存已耗尽 (404):
+    {
+        "status": "success",
+        "data": null,
+        "message": "当前时段的所有账号已被获取完毕，请在 45 分钟后再试"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误

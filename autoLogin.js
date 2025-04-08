@@ -6,6 +6,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
+const sizeOf = require('image-size');
 
 // MongoDB配置
 const MONGODB_OPTIONS = {
@@ -82,7 +83,7 @@ const storage = multer.diskStorage({
     }
 });
 
-// 文件过滤器保持不变
+// 文件过滤器配置
 const fileFilter = (req, file, cb) => {
     const allowedExtensions = ['.txt', '.vcf', '.xlsx'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -94,12 +95,49 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
+// 图片文件过滤器
+const imageFileFilter = (req, file, cb) => {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (allowedExtensions.includes(ext)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only .jpg, .jpeg, .png, .gif and .webp files are allowed'), false);
+    }
+};
+
+// 图片存储配置
+const imageStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, 'uploads', 'images');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const timestamp = Date.now();
+        const ext = path.extname(file.originalname);
+        cb(null, `${timestamp}${ext}`);
+    }
+});
+
 // 修改 multer 配置
 const upload = multer({ 
     storage: storage,
     fileFilter: fileFilter,
     limits: {
         fileSize: 20 * 1024 * 1024 // 限制文件大小为 20MB
+    }
+});
+
+// 图片上传配置
+const uploadImage = multer({
+    storage: imageStorage,
+    fileFilter: imageFileFilter,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 限制图片大小为 10MB
     }
 });
 
@@ -455,6 +493,48 @@ class AutoLoginService {
 
         } catch (error) {
             logger.error(`Error in uploadFile: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
+
+    async uploadImage(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "No image uploaded or image type not allowed"
+                });
+            }
+
+            // 构建图片的公网访问URL
+            const baseUrl = process.env.PUBLIC_URL || `http://${req.headers.host}`;
+            const imageUrl = `${baseUrl}/uploads/images/${req.file.filename}`;
+            const downloadUrl = `${baseUrl}/download/${req.file.filename}`;
+
+            // 获取图片尺寸信息
+            const dimensions = sizeOf(req.file.path);
+
+            logger.info(`Image uploaded successfully: ${req.file.filename}`);
+            return res.json({
+                status: "success",
+                data: {
+                    filename: req.file.filename,
+                    originalname: req.file.originalname,
+                    size: req.file.size,
+                    width: dimensions.width,
+                    height: dimensions.height,
+                    type: req.file.mimetype,
+                    url: imageUrl,
+                    downloadUrl: downloadUrl
+                },
+                message: "Image uploaded successfully"
+            });
+
+        } catch (error) {
+            logger.error(`Error in uploadImage: ${error.message}`);
             return res.status(500).json({
                 status: "error",
                 message: "Internal server error"
