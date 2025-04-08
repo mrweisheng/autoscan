@@ -529,8 +529,7 @@ class AutoLoginService {
             const imageUrl = `${baseUrl}/uploads/images/${req.file.filename}`;
             const downloadUrl = `${baseUrl}/download/${req.file.filename}`;
 
-            // 获取图片尺寸信息
-            const dimensions = imageSize(req.file.path);
+            // 获取图片尺寸信息的代码已移除
 
             logger.info(`Image uploaded successfully: ${req.file.filename}`);
             return res.json({
@@ -539,8 +538,6 @@ class AutoLoginService {
                     filename: req.file.filename,
                     originalname: req.file.originalname,
                     size: req.file.size,
-                    width: dimensions.width,
-                    height: dimensions.height,
                     type: req.file.mimetype,
                     url: imageUrl,
                     downloadUrl: downloadUrl
@@ -871,47 +868,6 @@ class AutoLoginService {
     }
 
     async markAccountAsHandled(req, res) {
-    }
-
-    async uploadImage(req, res) {
-        try {
-            if (!req.file) {
-                return res.status(400).json({
-                    status: "error",
-                    message: "No image uploaded or image type not allowed"
-                });
-            }
-
-            // 获取图片尺寸信息
-            const dimensions = imageSize(req.file.path);
-            
-            // 构建URL
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
-            const fileUrl = `${baseUrl}/uploads/images/${req.file.filename}`;
-            const downloadUrl = `${baseUrl}/download/${req.file.filename}`;
-
-            return res.json({
-                status: "success",
-                data: {
-                    filename: req.file.filename,
-                    originalname: req.file.originalname,
-                    size: req.file.size,
-                    width: dimensions.width,
-                    height: dimensions.height,
-                    type: req.file.mimetype,
-                    url: fileUrl,
-                    downloadUrl: downloadUrl
-                },
-                message: "Image uploaded successfully"
-            });
-
-        } catch (error) {
-            logger.error(`Error in uploadImage: ${error.message}`);
-            return res.status(500).json({
-                status: "error",
-                message: "Internal server error"
-            });
-        }
     }
 
     async importShopData(req, res) {
@@ -1317,3 +1273,4 @@ module.exports = {
     createServer,
     logger
 };
+            // 构建图片的公网访问URL
