@@ -589,7 +589,22 @@ class AutoLoginService {
             
             // 构建文件路径，并确保路径不会超出uploads目录
             const normalizedPath = path.normalize(filename).replace(/^(\.\.\/|\.\.\\)/g, '');
-            const filePath = path.join(__dirname, 'uploads', normalizedPath);
+            let filePath = '';
+            let fileExists = false;
+            
+            // 判断文件扩展名
+            const ext = path.extname(normalizedPath).toLowerCase();
+            const isImageFile = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+            
+            // 图片文件直接从uploads/images目录查找
+            if (isImageFile) {
+                filePath = path.join(__dirname, 'uploads', 'images', normalizedPath);
+                fileExists = fs.existsSync(filePath);
+            } else {
+                // 非图片文件从uploads目录查找
+                filePath = path.join(__dirname, 'uploads', normalizedPath);
+                fileExists = fs.existsSync(filePath);
+            }
             
             // 验证文件路径是否在允许的目录内
             const uploadsDir = path.join(__dirname, 'uploads');
@@ -602,7 +617,7 @@ class AutoLoginService {
             }
             
             // 检查文件是否存在
-            if (!fs.existsSync(filePath)) {
+            if (!fileExists) {
                 logger.warn(`File not found: ${filePath}`);
                 return res.status(404).json({
                     status: "error",
@@ -617,11 +632,18 @@ class AutoLoginService {
             res.setHeader('Content-Length', stat.size);
             
             // 根据文件扩展名设置正确的 Content-Type
-            const ext = path.extname(filename).toLowerCase();
             if (ext === '.txt') {
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8');
             } else if (ext === '.vcf') {
                 res.setHeader('Content-Type', 'text/vcard');
+            } else if (ext === '.png') {
+                res.setHeader('Content-Type', 'image/png');
+            } else if (ext === '.jpg' || ext === '.jpeg') {
+                res.setHeader('Content-Type', 'image/jpeg');
+            } else if (ext === '.gif') {
+                res.setHeader('Content-Type', 'image/gif');
+            } else if (ext === '.webp') {
+                res.setHeader('Content-Type', 'image/webp');
             } else {
                 res.setHeader('Content-Type', 'application/octet-stream');
             }
