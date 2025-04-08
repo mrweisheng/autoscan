@@ -835,6 +835,47 @@ class AutoLoginService {
     async markAccountAsHandled(req, res) {
     }
 
+    async uploadImage(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "No image uploaded or image type not allowed"
+                });
+            }
+
+            // 获取图片尺寸信息
+            const dimensions = sizeOf(req.file.path);
+            
+            // 构建URL
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const fileUrl = `${baseUrl}/uploads/images/${req.file.filename}`;
+            const downloadUrl = `${baseUrl}/download/${req.file.filename}`;
+
+            return res.json({
+                status: "success",
+                data: {
+                    filename: req.file.filename,
+                    originalname: req.file.originalname,
+                    size: req.file.size,
+                    width: dimensions.width,
+                    height: dimensions.height,
+                    type: req.file.mimetype,
+                    url: fileUrl,
+                    downloadUrl: downloadUrl
+                },
+                message: "Image uploaded successfully"
+            });
+
+        } catch (error) {
+            logger.error(`Error in uploadImage: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    }
+
     async importShopData(req, res) {
         try {
             if (!req.file) {
@@ -1116,6 +1157,9 @@ const createServer = async () => {
 
     // 添加导入店铺数据路由
     app.post('/import/shop-data', upload.single('file'), (req, res) => autoLoginService.importShopData(req, res));
+
+    // 添加图片上传路由
+    app.post('/upload/image', uploadImage.single('file'), (req, res) => autoLoginService.uploadImage(req, res));
 
     // 在路由定义部分添加一个测试路由
     app.get('/test/cache-status', (req, res) => {
