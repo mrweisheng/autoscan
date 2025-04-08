@@ -41,4 +41,5 @@ npm run dev
 ### 2025-04-08
 
 - 修复了上传图片API中的错误：删除了不必要的`imageSize`函数调用，因为不需要返回图片尺寸信息。错误信息为：`Error in uploadImage: imageSize is not a function`。
-- 优化了图片下载功能：现在系统会根据文件扩展名直接从正确的目录查找文件（图片文件从`uploads/images`目录，其他文件从`uploads`目录），并设置了正确的Content-Type。修复了下载链接显示"File not found"的错误。 
+- 优化了图片下载功能：现在系统会根据文件扩展名直接从正确的目录查找文件（图片文件从`uploads/images`目录，其他文件从`uploads`目录），并设置了正确的Content-Type。修复了下载链接显示"File not found"的错误。
+- 新增了随机获取商品API：`GET /products/random`，从数据库随机返回一条商品记录。采用MongoDB聚合管道和`$sample`操作符实现真正的随机性，支持高并发请求。 

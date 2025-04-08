@@ -890,6 +890,104 @@ class AutoLoginService {
     }
 
     async markAccountAsHandled(req, res) {
+        try {
+            const { phoneNumber } = req.query;
+
+            if (!phoneNumber) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "缺少必填参数: phoneNumber"
+                });
+            }
+
+            const result = await Account.findOneAndUpdate(
+                { 
+                    phoneNumber
+                },
+                { 
+                    $set: { isHandle: true } 
+                },
+                { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
+            );
+
+            if (!result) {
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: "未找到该账号"
+                });
+            }
+
+            logger.info(`成功标记账号处理状态: ${phoneNumber}, isHandle=true`);
+            return res.json({
+                status: "success",
+                data: {
+                    phoneNumber: result.phoneNumber,
+                    isHandle: result.isHandle
+                },
+                message: "账号标记为已处理"
+            });
+
+        } catch (error) {
+            logger.error(`标记账号处理状态失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
+
+    async getRandomProduct(req, res) {
+        // 生成请求ID和时间戳，用于日志和调试
+        const now = Date.now();
+        const requestId = Math.random().toString(36).substring(2, 10);
+        logger.info(`[${requestId}] 接收到获取随机商品请求`);
+        
+        try {
+            // 处理并发请求 - 使用聚合管道确保随机性
+            // 获取商品总数
+            const count = await ShopProduct.countDocuments();
+            
+            if (count === 0) {
+                logger.info(`[${requestId}] 商品表为空，没有可返回的记录`);
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: "商品表为空，没有可返回的记录"
+                });
+            }
+            
+            // 使用聚合管道实现真正的随机
+            // 1. 生成一个随机数作为跳过的文档数
+            // 2. 但为避免偏向性（特别是在数据量大的情况下），我们使用sample
+            const randomProduct = await ShopProduct.aggregate([
+                { $sample: { size: 1 } },
+                { $project: { _id: 0, __v: 0 } }
+            ]);
+            
+            if (!randomProduct || randomProduct.length === 0) {
+                logger.warn(`[${requestId}] 未能获取随机商品记录`);
+                return res.status(404).json({
+                    status: "success",
+                    data: null,
+                    message: "未能获取随机商品记录"
+                });
+            }
+            
+            logger.info(`[${requestId}] 成功获取随机商品: ${randomProduct[0].productName}`);
+            return res.json({
+                status: "success",
+                data: randomProduct[0],
+                message: "成功获取随机商品"
+            });
+            
+        } catch (error) {
+            logger.error(`[${requestId}] 获取随机商品失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
     }
 
     async importShopData(req, res) {
@@ -1015,51 +1113,6 @@ class AutoLoginService {
                 message: "服务器内部错误"
             });
         }
-        try {
-            const { phoneNumber } = req.query;
-
-            if (!phoneNumber) {
-                return res.status(400).json({
-                    status: "error",
-                    message: "缺少必填参数: phoneNumber"
-                });
-            }
-
-            const result = await Account.findOneAndUpdate(
-                { 
-                    phoneNumber
-                },
-                { 
-                    $set: { isHandle: true } 
-                },
-                { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
-            );
-
-            if (!result) {
-                return res.status(404).json({
-                    status: "success",
-                    data: null,
-                    message: "未找到该账号"
-                });
-            }
-
-            logger.info(`成功标记账号处理状态: ${phoneNumber}, isHandle=true`);
-            return res.json({
-                status: "success",
-                data: {
-                    phoneNumber: result.phoneNumber,
-                    isHandle: result.isHandle
-                },
-                message: "账号标记为已处理"
-            });
-
-        } catch (error) {
-            logger.error(`标记账号处理状态失败: ${error.message}`);
-            return res.status(500).json({
-                status: "error",
-                message: "服务器内部错误"
-            });
-        }
     }
 }
 
@@ -1176,6 +1229,9 @@ const createServer = async () => {
 
     // 添加图片上传路由
     app.post('/upload/image', uploadImage.single('file'), (req, res) => autoLoginService.uploadImage(req, res));
+
+    // 添加获取随机商品的路由
+    app.get('/products/random', (req, res) => autoLoginService.getRandomProduct(req, res));
 
     // 在路由定义部分添加一个测试路由
     app.get('/test/cache-status', (req, res) => {
