@@ -6,7 +6,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
-const sizeOf = require('image-size');
+const imageSize = require('image-size');
 
 // MongoDB配置
 const MONGODB_OPTIONS = {
@@ -475,6 +475,21 @@ class AutoLoginService {
                 });
             }
 
+            // 验证上传目录是否存在
+            const uploadDir = path.join(__dirname, 'uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+
+            // 验证文件大小
+            if (req.file.size > 20 * 1024 * 1024) { // 20MB
+                fs.unlinkSync(req.file.path); // 删除超大文件
+                return res.status(400).json({
+                    status: "error",
+                    message: "File size exceeds limit (20MB)"
+                });
+            }
+
             // 构建文件的公网访问URL，使用原始文件名
             const baseUrl = process.env.PUBLIC_URL || `http://${req.headers.host}`;
             const fileUrl = `${baseUrl}/uploads/${req.file.originalname}`;
@@ -515,7 +530,7 @@ class AutoLoginService {
             const downloadUrl = `${baseUrl}/download/${req.file.filename}`;
 
             // 获取图片尺寸信息
-            const dimensions = sizeOf(req.file.path);
+            const dimensions = imageSize(req.file.path);
 
             logger.info(`Image uploaded successfully: ${req.file.filename}`);
             return res.json({
@@ -553,18 +568,41 @@ class AutoLoginService {
                 });
             }
             
+            // 验证文件名是否包含非法字符
+            if (/[\\/:*?"<>|]/.test(filename)) {
+                logger.warn(`Invalid filename detected: ${filename}`);
+                return res.status(400).json({
+                    status: "error",
+                    message: "Invalid filename"
+                });
+            }
+
             // 尝试解码 URL 编码的文件名
             try {
                 filename = decodeURIComponent(filename);
             } catch (e) {
                 logger.warn(`Failed to decode filename: ${filename}, ${e.message}`);
-                // 继续使用原始文件名
+                return res.status(400).json({
+                    status: "error",
+                    message: "Invalid filename encoding"
+                });
             }
             
             logger.info(`Download request for file: ${filename}`);
             
-            // 构建文件路径
-            const filePath = path.join(__dirname, 'uploads', filename);
+            // 构建文件路径，并确保路径不会超出uploads目录
+            const normalizedPath = path.normalize(filename).replace(/^(\.\.\/|\.\.\\)/g, '');
+            const filePath = path.join(__dirname, 'uploads', normalizedPath);
+            
+            // 验证文件路径是否在允许的目录内
+            const uploadsDir = path.join(__dirname, 'uploads');
+            if (!filePath.startsWith(uploadsDir)) {
+                logger.warn(`Attempted path traversal: ${filePath}`);
+                return res.status(403).json({
+                    status: "error",
+                    message: "Access denied"
+                });
+            }
             
             // 检查文件是否存在
             if (!fs.existsSync(filePath)) {
@@ -845,7 +883,7 @@ class AutoLoginService {
             }
 
             // 获取图片尺寸信息
-            const dimensions = sizeOf(req.file.path);
+            const dimensions = imageSize(req.file.path);
             
             // 构建URL
             const baseUrl = `${req.protocol}://${req.get('host')}`;
