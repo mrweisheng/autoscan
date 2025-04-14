@@ -20,22 +20,27 @@ class EmailController {
         });
       }
 
-      // 简单的邮箱格式验证
+      // 处理收件人格式 - 可以是字符串或数组
+      const recipients = Array.isArray(to) ? to : to.split(/\s*,\s*/);
+      
+      // 验证每个邮箱地址格式
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(to)) {
+      const invalidEmails = recipients.filter(email => !emailRegex.test(email));
+      
+      if (invalidEmails.length > 0) {
         return res.status(400).json({
           status: "error",
-          message: "收件人邮箱格式不正确"
+          message: `以下邮箱格式不正确: ${invalidEmails.join(', ')}`
         });
       }
 
       // 发送邮件
-      await emailService.sendEmail(to, subject, text, html);
+      await emailService.sendEmail(recipients, subject, text, html);
 
-      logger.info(`成功发送邮件至 ${to}`);
+      logger.info(`成功发送邮件至 ${recipients.join(', ')}`);
       return res.json({
         status: "success",
-        message: "邮件发送成功"
+        message: `邮件成功发送给 ${recipients.length} 个收件人`
       });
     } catch (error) {
       logger.error(`邮件发送控制器错误: ${error.message}`);

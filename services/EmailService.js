@@ -72,7 +72,7 @@ class EmailService {
 
   /**
    * 发送邮件
-   * @param {String} to 收件人邮箱
+   * @param {String|Array} to 收件人邮箱(可以是单个地址，逗号分隔的多个地址，或数组)
    * @param {String} subject 邮件主题
    * @param {String} text 纯文本内容
    * @param {String} html HTML内容
@@ -80,15 +80,18 @@ class EmailService {
    */
   async sendEmail(to, subject, text, html) {
     try {
+      // 确保to是一个数组或字符串
+      const recipients = Array.isArray(to) ? to : to;
+      
       if (this.usePostmark) {
         // 使用Postmark发送
-        return await this.sendWithPostmark(to, subject, text, html);
+        return await this.sendWithPostmark(recipients, subject, text, html);
       } else if (this.useAliCloud) {
         // 使用阿里云邮件推送发送
-        return await this.sendWithAliCloud(to, subject, text, html);
+        return await this.sendWithAliCloud(recipients, subject, text, html);
       } else {
         // 使用SMTP发送
-        return await this.sendWithSMTP(to, subject, text, html);
+        return await this.sendWithSMTP(recipients, subject, text, html);
       }
     } catch (error) {
       logger.error(`邮件发送失败: ${error.message}`);
@@ -102,14 +105,15 @@ class EmailService {
   async sendWithPostmark(to, subject, text, html) {
     const response = await this.client.sendEmail({
       From: process.env.EMAIL_FROM,
-      To: to,
+      To: Array.isArray(to) ? to.join(',') : to,
       Subject: subject,
       TextBody: text,
       HtmlBody: html || text,
       MessageStream: 'outbound'
     });
 
-    logger.info(`Postmark邮件发送成功 [${response.MessageID}]: 发送给 ${to}, 主题: ${subject}`);
+    const recipients = Array.isArray(to) ? to.join(', ') : to;
+    logger.info(`Postmark邮件发送成功 [${response.MessageID}]: 发送给 ${recipients}, 主题: ${subject}`);
     return { 
       success: true, 
       messageId: response.MessageID,
@@ -124,7 +128,44 @@ class EmailService {
     if (!this.aliClient) {
       throw new Error('阿里云邮件推送客户端未初始化，请安装@alicloud/pop-core包');
     }
-
+    
+    // 阿里云邮件推送一次只能发给一个收件人，需要循环发送
+    if (Array.isArray(to)) {
+      const results = [];
+      const errors = [];
+      
+      // 循环发送邮件给每个收件人
+      for (const recipient of to) {
+        try {
+          const result = await this._sendSingleAliCloudMail(recipient, subject, text, html);
+          results.push(result);
+        } catch (error) {
+          errors.push({ recipient, error: error.message });
+          logger.error(`发送给 ${recipient} 失败: ${error.message}`);
+        }
+      }
+      
+      if (errors.length > 0) {
+        logger.warn(`部分邮件发送失败: ${JSON.stringify(errors)}`);
+      }
+      
+      return {
+        success: errors.length < to.length, // 只要有一封成功就返回成功
+        messageCount: results.length,
+        failureCount: errors.length,
+        details: { results, errors }
+      };
+    } else {
+      // 单个收件人
+      return await this._sendSingleAliCloudMail(to, subject, text, html);
+    }
+  }
+  
+  /**
+   * 使用阿里云发送给单个收件人
+   * @private
+   */
+  async _sendSingleAliCloudMail(to, subject, text, html) {
     const params = {
       AccountName: process.env.ALICLOUD_SENDER_EMAIL,
       AddressType: 1,
@@ -164,7 +205,7 @@ class EmailService {
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to,
+      to: Array.isArray(to) ? to.join(',') : to,
       subject,
       text,
       html: html || text,
@@ -176,11 +217,12 @@ class EmailService {
     };
 
     // 添加日志，显示详细信息
-    logger.info(`准备发送邮件到: ${to}, 主题: ${subject}, 使用SMTP服务: ${process.env.EMAIL_HOST}:${process.env.EMAIL_PORT}`);
+    const recipients = Array.isArray(to) ? to.join(', ') : to;
+    logger.info(`准备发送邮件到: ${recipients}, 主题: ${subject}, 使用SMTP服务: ${process.env.EMAIL_HOST}:${process.env.EMAIL_PORT}`);
     
     try {
       const info = await this.transporter.sendMail(mailOptions);
-      logger.info(`SMTP邮件发送成功 [${info.messageId}]: 发送给 ${to}, 主题: ${subject}`);
+      logger.info(`SMTP邮件发送成功 [${info.messageId}]: 发送给 ${recipients}, 主题: ${subject}`);
       return { success: true, messageId: info.messageId };
     } catch (error) {
       logger.error(`SMTP邮件发送失败: ${error.message}`);

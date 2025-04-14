@@ -111,6 +111,28 @@ Content-Type: application/json
 }
 ```
 
+#### 发送给多个收件人
+
+支持三种方式发送给多个收件人：
+
+1. **逗号分隔的字符串**：
+```json
+{
+  "to": "user1@example.com, user2@example.com, user3@example.com",
+  "subject": "测试邮件",
+  "text": "群发测试"
+}
+```
+
+2. **数组形式**：
+```json
+{
+  "to": ["user1@example.com", "user2@example.com", "user3@example.com"],
+  "subject": "测试邮件",
+  "text": "群发测试"
+}
+```
+
 #### 配置选项
 
 系统支持多种邮件发送方式：
