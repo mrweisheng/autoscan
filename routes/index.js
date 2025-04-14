@@ -5,12 +5,14 @@ const loginRoutes = require('./loginRoutes');
 const accountRoutes = require('./accountRoutes');
 const fileRoutes = require('./fileRoutes');
 const shopRoutes = require('./shopRoutes');
+const emailRoutes = require('./emailRoutes');
 
 // 将路由模块组装到主路由中
 router.use('/', loginRoutes);
 router.use('/', accountRoutes);
 router.use('/', fileRoutes);
 router.use('/', shopRoutes);
+router.use('/', emailRoutes);
 
 // 首页路由
 router.get('/', (req, res) => {
