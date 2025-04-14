@@ -2,10 +2,10 @@
   "name": "auto-login-service",
   "version": "1.0.0",
   "description": "Auto login service with Express and MongoDB",
-  "main": "autoLogin.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node autoLogin.js",
-    "dev": "nodemon autoLogin.js",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "jest --detectOpenHandles --forceExit --testTimeout=30000"
   },
   "dependencies": {
