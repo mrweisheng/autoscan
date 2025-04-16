@@ -210,12 +210,15 @@ class AutoLoginService {
                 return await operation();
             } catch (error) {
                 lastError = error;
-                logger.warn(`操作失败，尝试次数: ${attempt + 1}, 错误: ${error.message}`);
+                logger.warn(`操作失败，尝试次数: ${attempt + 1}/${maxRetries}, 错误: ${error.message}`);
                 if (attempt < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    // 使用指数退避策略
+                    const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
+        logger.error(`操作最终失败，已重试 ${maxRetries} 次，最后错误: ${lastError.message}`);
         throw lastError;
     }
 
@@ -1170,10 +1173,54 @@ const createServer = async () => {
     logger.info("服务器启动时创建的 AutoLoginService 实例");
 
     // 路由定义
-    app.get('/mobile/push-need-login', (req, res) => autoLoginService.mobilePushNeedLogin(req, res));
-    app.get('/pc/get_need_login', (req, res) => autoLoginService.pcGetNeedLogin(req, res));
-    app.get('/pc/push_need_scan', (req, res) => autoLoginService.pcPushNeedScan(req, res));
-    app.get('/mobile/get-need-scan', (req, res) => autoLoginService.mobileGetNeedScan(req, res));
+    app.get('/mobile/push-need-login', async (req, res) => {
+        try {
+            await autoLoginService.mobilePushNeedLogin(req, res);
+        } catch (error) {
+            logger.error(`处理手机端登录请求失败: ${error.message}`);
+            res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    });
+
+    app.get('/pc/get_need_login', async (req, res) => {
+        try {
+            await autoLoginService.pcGetNeedLogin(req, res);
+        } catch (error) {
+            logger.error(`处理PC端获取登录请求失败: ${error.message}`);
+            res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    });
+
+    app.get('/pc/push_need_scan', async (req, res) => {
+        try {
+            await autoLoginService.pcPushNeedScan(req, res);
+        } catch (error) {
+            logger.error(`处理PC端扫码请求失败: ${error.message}`);
+            res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    });
+
+    app.get('/mobile/get-need-scan', async (req, res) => {
+        try {
+            await autoLoginService.mobileGetNeedScan(req, res);
+        } catch (error) {
+            logger.error(`处理手机端获取扫码请求失败: ${error.message}`);
+            res.status(500).json({
+                status: "error",
+                message: "Internal server error"
+            });
+        }
+    });
+
     app.get('/accounts/inactive', (req, res) => autoLoginService.getInactiveAccounts(req, res));
     app.get('/accounts/update-login', (req, res) => autoLoginService.updateLastLogin(req, res));
     app.get('/health', async (req, res) => {

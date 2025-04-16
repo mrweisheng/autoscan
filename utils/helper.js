@@ -3,6 +3,16 @@ const path = require('path');
 const fs = require('fs');
 
 /**
+ * 计算指数退避延迟时间
+ * @param {Number} attempt 当前尝试次数
+ * @param {Number} baseDelay 基础延迟时间（毫秒）
+ * @returns {Number} 延迟时间（毫秒）
+ */
+function calculateBackoffDelay(attempt, baseDelay = 1000) {
+    return Math.min(baseDelay * Math.pow(2, attempt), 30000); // 最大延迟30秒
+}
+
+/**
  * 带重试机制的操作执行函数
  * @param {Function} operation 要执行的操作
  * @param {Number} maxRetries 最大重试次数
@@ -15,12 +25,15 @@ async function executeWithRetry(operation, maxRetries = 3) {
             return await operation();
         } catch (error) {
             lastError = error;
-            logger.warn(`操作失败，尝试次数: ${attempt + 1}, 错误: ${error.message}`);
+            const delay = calculateBackoffDelay(attempt);
+            logger.warn(`操作失败，尝试次数: ${attempt + 1}/${maxRetries}, 错误: ${error.message}, 将在 ${delay}ms 后重试`);
+            
             if (attempt < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
+    logger.error(`操作最终失败，已重试 ${maxRetries} 次，最后错误: ${lastError.message}`);
     throw lastError;
 }
 
