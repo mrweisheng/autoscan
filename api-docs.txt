@@ -449,9 +449,128 @@
         "message": "邮件发送失败: [错误详情]"
     }
 
+### 15. 添加疑似永久封禁账号
+- 接口: /accounts/report-permanent-ban
+- 方法: GET
+- 描述: 标记一个账号为疑似永久封禁状态，存储在主数据库，来源字段根据当前环境配置的`ACCOUNTS_API_SOURCE`设置
+- 请求参数:
+  - phoneNumber: 字符串，必填，手机号码
+  - remarks: 字符串，可选，备注信息
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "phoneNumber": "手机号码",
+            "source": "来源(main/shu/both)",
+            "reportedAt": "2023-04-19T12:34:56.789Z",
+            "status": "pending"
+        },
+        "message": "成功添加疑似永久封禁账号"
+    }
+  - 已存在 (409):
+    {
+        "status": "error",
+        "message": "该号码已经被标记为疑似永久封禁"
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必填参数: phoneNumber"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
+### 16. 获取疑似永久封禁账号列表
+- 接口: /accounts/permanently-banned
+- 方法: GET
+- 描述: 获取所有疑似永久封禁账号列表，支持按来源和状态筛选
+- 请求参数:
+  - source: 字符串，可选，筛选特定来源的记录(main/shu/both)
+  - status: 字符串，可选，筛选特定状态的记录(pending/confirmed/invalid)
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": [
+            {
+                "phoneNumber": "手机号码1",
+                "source": "main",
+                "reportedAt": "2023-04-19T12:34:56.789Z",
+                "status": "pending",
+                "remarks": "备注信息",
+                "createdAt": "2023-04-19T12:34:56.789Z",
+                "updatedAt": "2023-04-19T12:34:56.789Z"
+            },
+            {
+                "phoneNumber": "手机号码2",
+                "source": "shu",
+                "reportedAt": "2023-04-19T13:45:07.890Z",
+                "status": "confirmed",
+                "remarks": "",
+                "createdAt": "2023-04-19T13:45:07.890Z",
+                "updatedAt": "2023-04-20T09:12:34.567Z"
+            }
+        ],
+        "message": "成功获取 2 条记录"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
+### 17. 更新疑似永久封禁账号状态
+- 接口: /accounts/update-permanent-status
+- 方法: GET
+- 描述: 更新指定疑似永久封禁账号的状态和备注
+- 请求参数:
+  - phoneNumber: 字符串，必填，手机号码
+  - status: 字符串，必填，新的状态，必须是以下之一: pending, confirmed, invalid
+  - remarks: 字符串，可选，新的备注信息
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "phoneNumber": "手机号码",
+            "source": "main",
+            "reportedAt": "2023-04-19T12:34:56.789Z",
+            "status": "confirmed",
+            "remarks": "已确认永久封禁",
+            "createdAt": "2023-04-19T12:34:56.789Z",
+            "updatedAt": "2023-04-20T15:30:45.678Z"
+        },
+        "message": "成功更新疑似永久封禁账号状态"
+    }
+  - 未找到记录 (404):
+    {
+        "status": "error",
+        "message": "未找到指定的账号记录"
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必填参数: phoneNumber"
+    }
+    或
+    {
+        "status": "error",
+        "message": "状态参数无效，必须是: pending, confirmed, invalid"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误
 - 404: 未找到相关记录
+- 409: 资源冲突(如记录已存在)
 - 500: 服务器内部错误
 
