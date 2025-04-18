@@ -261,6 +261,63 @@ class AccountService {
 
         return result;
     }
+
+    /**
+     * 获取已处理的被封禁账号
+     * @param {boolean} fromShu 是否从Shu数据库查询
+     * @returns {Promise<Array>} 账号列表
+     */
+    async getHandledBannedAccounts(fromShu = false) {
+        try {
+            const requestId = Math.random().toString(36).substring(2, 10);
+            const dbSource = fromShu ? 'Shu' : '主';
+            logger.info(`[${requestId}] 从${dbSource}数据库获取已处理的被封禁账号`);
+            
+            let accounts = [];
+            
+            if (fromShu) {
+                // 从Shu数据库查询
+                const ShuAccount = await getShuAccount();
+                if (!ShuAccount) {
+                    logger.warn(`[${requestId}] 未能获取Shu数据库连接，无法加载已处理的被封禁账号`);
+                    return [];
+                }
+                
+                accounts = await ShuAccount.find(
+                    { 
+                        status: 'banned',
+                        isHandle: true
+                    },
+                    {
+                        _id: 0,
+                        name: 1,
+                        phoneNumber: 1,
+                        proxy: 1
+                    }
+                ).lean();
+            } else {
+                // 从主数据库查询
+                accounts = await Account.find(
+                    { 
+                        status: 'banned',
+                        isHandle: true
+                    },
+                    {
+                        _id: 0,
+                        name: 1,
+                        phoneNumber: 1,
+                        proxy: 1
+                    }
+                ).lean();
+            }
+            
+            logger.info(`[${requestId}] 从${dbSource}数据库获取了 ${accounts.length} 个已处理的被封禁账号`);
+            return accounts;
+        } catch (error) {
+            logger.error(`获取已处理的被封禁账号失败: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 module.exports = new AccountService(); 

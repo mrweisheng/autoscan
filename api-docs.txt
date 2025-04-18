@@ -567,6 +567,38 @@
         "message": "服务器内部错误"
     }
 
+### 18. 获取已处理的被封禁账号
+- 接口: /accounts/handled-banned
+- 方法: GET
+- 描述: 获取状态为banned且isHandle为true的账号列表，默认从主数据库查询，可通过参数指定从Shu数据库查询
+- 请求参数:
+  - fromShu: 布尔值，可选，是否从Shu数据库查询。true或1表示从Shu数据库查询，默认为false，从主数据库查询
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": [
+            {
+                "name": "用户名",
+                "phoneNumber": "手机号码",
+                "proxy": {
+                    "host": "代理主机",
+                    "port": "代理端口",
+                    "username": "代理用户名",
+                    "password": "代理密码"
+                }
+            },
+            // 更多账号...
+        ],
+        "totalCount": 10,
+        "source": "main" // 或 "shu"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误

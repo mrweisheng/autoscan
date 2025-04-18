@@ -145,6 +145,33 @@ class AccountController {
             });
         }
     }
+
+    async getHandledBannedAccounts(req, res) {
+        try {
+            const { fromShu } = req.query;
+            
+            // 根据参数决定查询的数据库
+            const useShufromShu = fromShu === 'true' || fromShu === '1';
+            
+            // 获取数据
+            const accounts = await accountService.getHandledBannedAccounts(useShufromShu);
+            
+            logger.info(`成功获取已处理的被封禁账号，共 ${accounts.length} 条记录，数据源: ${useShufromShu ? 'Shu数据库' : '主数据库'}`);
+            return res.json({
+                status: "success",
+                data: accounts,
+                totalCount: accounts.length,
+                source: useShufromShu ? 'shu' : 'main'
+            });
+
+        } catch (error) {
+            logger.error(`获取已处理的被封禁账号失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
 }
 
 module.exports = new AccountController(); 

@@ -14,6 +14,9 @@ router.get('/accounts/random-banned', accountController.getRandomBannedAccount);
 // 标记账号处理成功
 router.get('/accounts/mark-handled', accountController.markAccountAsHandled);
 
+// 获取已处理的被封禁账号
+router.get('/accounts/handled-banned', accountController.getHandledBannedAccounts);
+
 // 添加疑似永久封禁账号
 router.get('/accounts/report-permanent-ban', permanentlyBannedAccountController.addPermanentlyBannedAccount);
 
