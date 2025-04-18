@@ -1,6 +1,8 @@
 const { Account } = require('../models');
+const { getShuAccount } = require('../models/Account');
 const { logger } = require('../config');
 const { executeWithRetry } = require('../utils/helper');
+const { DB_CONFIG, DatabaseConnection } = require('../config/database');
 
 class AccountService {
     constructor() {
@@ -11,6 +13,7 @@ class AccountService {
         this.cacheMaxAge = 1000 * 60 * 60; // 缓存有效期：1小时
         this.cacheExhausted = false;   // 标记缓存是否已耗尽
         this.processingRequest = false; // 请求处理锁，防止并发访问导致的问题
+        this.currentSource = 'main';   // 当前数据源
     }
 
     /**
@@ -55,7 +58,7 @@ class AccountService {
     async getRandomBannedAccount() {
         const now = Date.now();
         const requestId = Math.random().toString(36).substring(2, 10);
-        logger.info(`[${requestId}] 接收到获取被封禁账号请求`);
+        logger.info(`[${requestId}] 接收到获取被封禁账号请求，当前数据源: ${DB_CONFIG.accountsApiSource}`);
         
         try {
             // 并发请求处理 - 如果有请求正在处理，等待它完成
@@ -72,24 +75,14 @@ class AccountService {
                 // 缓存过期或为空，重新查询数据库并重置指针
                 logger.info(`[${requestId}] 重新加载被封禁账号缓存 - 原因: ${this.bannedAccountsCache.length === 0 ? '缓存为空' : '缓存过期'}`);
                 
-                this.bannedAccountsCache = await Account.find(
-                    { 
-                        status: 'banned',
-                        isHandle: false
-                    },
-                    {
-                        _id: 0,
-                        name: 1,
-                        phoneNumber: 1,
-                        proxy: 1
-                    }
-                ).lean();
+                // 根据配置选择数据库源
+                await this.loadBannedAccountsFromAllSources();
                 
                 this.cacheIndex = 0;
                 this.cacheTimestamp = now;
                 this.cacheExhausted = false;
                 
-                logger.info(`[${requestId}] 已加载 ${this.bannedAccountsCache.length} 个被封禁账号到缓存`);
+                logger.info(`[${requestId}] 已加载 ${this.bannedAccountsCache.length} 个被封禁账号到缓存，数据源: ${this.currentSource}`);
             }
             
             // 如果缓存为空，返回null
@@ -113,7 +106,7 @@ class AccountService {
             // 获取当前账号并递增指针
             const account = this.bannedAccountsCache[this.cacheIndex++];
             
-            logger.info(`[${requestId}] 返回被封禁账号: ${account.phoneNumber}，缓存位置: ${this.cacheIndex}/${this.bannedAccountsCache.length}`);
+            logger.info(`[${requestId}] 返回被封禁账号: ${account.phoneNumber}，缓存位置: ${this.cacheIndex}/${this.bannedAccountsCache.length}，数据源: ${this.currentSource}`);
             this.processingRequest = false;
             return account;
             
@@ -123,6 +116,104 @@ class AccountService {
             throw error;
         }
     }
+    
+    /**
+     * 从配置的所有数据源加载被封禁账号
+     * @private
+     */
+    async loadBannedAccountsFromAllSources() {
+        const dataSource = DB_CONFIG.accountsApiSource;
+        this.currentSource = dataSource;
+        
+        if (dataSource === 'main') {
+            // 只从主数据库加载
+            this.bannedAccountsCache = await this.loadBannedAccountsFromMainDB();
+        } else if (dataSource === 'shu') {
+            // 只从Shu数据库加载
+            this.bannedAccountsCache = await this.loadBannedAccountsFromShuDB();
+        } else if (dataSource === 'both') {
+            // 从两个数据库加载并合并结果
+            const mainAccounts = await this.loadBannedAccountsFromMainDB();
+            const shuAccounts = await this.loadBannedAccountsFromShuDB();
+            
+            // 合并账号列表，避免重复（基于phoneNumber去重）
+            const phoneNumbers = new Set();
+            const mergedAccounts = [];
+            
+            // 处理主数据库账号
+            mainAccounts.forEach(account => {
+                if (!phoneNumbers.has(account.phoneNumber)) {
+                    phoneNumbers.add(account.phoneNumber);
+                    // 标记来源数据库
+                    account.dbSource = 'main';
+                    mergedAccounts.push(account);
+                }
+            });
+            
+            // 处理Shu数据库账号
+            shuAccounts.forEach(account => {
+                if (!phoneNumbers.has(account.phoneNumber)) {
+                    phoneNumbers.add(account.phoneNumber);
+                    // 标记来源数据库
+                    account.dbSource = 'shu';
+                    mergedAccounts.push(account);
+                }
+            });
+            
+            this.bannedAccountsCache = mergedAccounts;
+        }
+    }
+    
+    /**
+     * 从主数据库加载被封禁账号
+     * @private
+     * @returns {Promise<Array>} 被封禁账号列表
+     */
+    async loadBannedAccountsFromMainDB() {
+        return await Account.find(
+            { 
+                status: 'banned',
+                isHandle: false
+            },
+            {
+                _id: 0,
+                name: 1,
+                phoneNumber: 1,
+                proxy: 1
+            }
+        ).lean();
+    }
+    
+    /**
+     * 从Shu数据库加载被封禁账号
+     * @private
+     * @returns {Promise<Array>} 被封禁账号列表
+     */
+    async loadBannedAccountsFromShuDB() {
+        try {
+            const ShuAccount = await getShuAccount();
+            if (!ShuAccount) {
+                logger.warn('未能获取Shu数据库连接，无法加载被封禁账号');
+                return [];
+            }
+            
+            return await ShuAccount.find(
+                { 
+                    status: 'banned',
+                    isHandle: false
+                },
+                {
+                    _id: 0,
+                    name: 1,
+                    phoneNumber: 1,
+                    proxy: 1
+                }
+            ).lean();
+        } catch (error) {
+            logger.error(`从Shu数据库加载被封禁账号失败: ${error.message}`);
+            return [];
+        }
+    }
 
     /**
      * 标记账号为已处理
@@ -130,15 +221,43 @@ class AccountService {
      * @returns {Promise<Object>} 更新后的账号
      */
     async markAccountAsHandled(phoneNumber) {
-        const result = await Account.findOneAndUpdate(
-            { 
-                phoneNumber
-            },
-            { 
-                $set: { isHandle: true } 
-            },
-            { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
-        );
+        // 根据配置选择数据源
+        const dataSource = DB_CONFIG.accountsApiSource;
+        
+        let result = null;
+        
+        if (dataSource === 'main' || dataSource === 'both') {
+            // 尝试在主数据库更新
+            result = await Account.findOneAndUpdate(
+                { phoneNumber },
+                { $set: { isHandle: true } },
+                { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
+            );
+            
+            if (result) {
+                logger.info(`在主数据库中标记账号为已处理: ${phoneNumber}`);
+            }
+        }
+        
+        if ((dataSource === 'shu' || (dataSource === 'both' && !result)) && !result) {
+            // 在Shu数据库中尝试更新
+            try {
+                const ShuAccount = await getShuAccount();
+                if (ShuAccount) {
+                    result = await ShuAccount.findOneAndUpdate(
+                        { phoneNumber },
+                        { $set: { isHandle: true } },
+                        { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
+                    );
+                    
+                    if (result) {
+                        logger.info(`在Shu数据库中标记账号为已处理: ${phoneNumber}`);
+                    }
+                }
+            } catch (error) {
+                logger.error(`在Shu数据库中标记账号失败: ${error.message}`);
+            }
+        }
 
         return result;
     }
