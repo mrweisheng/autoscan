@@ -8,6 +8,23 @@ const routes = require('./routes');
 const app = express();
 const PORT = process.env.PORT || 9000;
 
+// 解决跨域问题的中间件
+app.use((req, res, next) => {
+    // 允许所有来源的请求，也可以指定特定的域名
+    res.header('Access-Control-Allow-Origin', '*');
+    // 允许的请求头
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    // 允许的HTTP方法
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // 对于预检请求，直接返回200
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    
+    next();
+});
+
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
