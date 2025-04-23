@@ -3,7 +3,7 @@ const { logger } = require('../config');
 
 class PermanentlyBannedAccountController {
     /**
-     * 添加疑似永久封禁账号
+     * 添加疑似永久封禁账号 - 更新为新逻辑：在两个数据库查询记录并标记为isPermanentBan=true
      * @param {Object} req 请求对象
      * @param {Object} res 响应对象
      * @returns {Promise<void>}
@@ -20,35 +20,33 @@ class PermanentlyBannedAccountController {
                 });
             }
             
-            // 检查是否已存在
-            const exists = await permanentlyBannedAccountService.exists(phoneNumber);
-            if (exists) {
-                return res.status(409).json({
-                    status: "error",
-                    message: "该号码已经被标记为疑似永久封禁"
-                });
-            }
-            
-            // 添加记录
+            // 调用服务方法查询并更新账号
             const result = await permanentlyBannedAccountService.addPermanentlyBannedAccount({
                 phoneNumber,
                 remarks: remarks || ''
             });
             
-            logger.info(`成功添加疑似永久封禁账号: ${phoneNumber}`);
-            return res.json({
-                status: "success",
-                data: {
-                    phoneNumber: result.phoneNumber,
-                    source: result.source,
-                    reportedAt: result.reportedAt,
-                    status: result.status
-                },
-                message: "成功添加疑似永久封禁账号"
-            });
+            if (result.success) {
+                logger.info(`成功将账号标记为永久封禁: ${phoneNumber}`);
+                return res.json({
+                    status: "success",
+                    data: {
+                        phoneNumber: result.data.phoneNumber,
+                        source: result.source,
+                        isPermanentBan: result.data.isPermanentBan
+                    },
+                    message: "成功将账号标记为永久封禁"
+                });
+            } else {
+                // 未找到账号记录
+                return res.status(404).json({
+                    status: "error",
+                    message: result.message
+                });
+            }
             
         } catch (error) {
-            logger.error(`添加疑似永久封禁账号失败: ${error.message}`);
+            logger.error(`标记永久封禁账号失败: ${error.message}`);
             return res.status(500).json({
                 status: "error",
                 message: "服务器内部错误"

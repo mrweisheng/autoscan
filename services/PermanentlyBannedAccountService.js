@@ -1,34 +1,81 @@
 const { PermanentlyBannedAccount } = require('../models');
 const { logger } = require('../config');
 const { DB_CONFIG } = require('../config/database');
+const { Account } = require('../models');
+const mongoose = require('mongoose');
 
 class PermanentlyBannedAccountService {
     /**
-     * 添加疑似永久封禁账号
+     * 添加疑似永久封禁账号 - 更新为新逻辑：在两个数据库查询记录并标记为isPermanentBan=true
      * @param {Object} accountData 账号数据
      * @param {string} accountData.phoneNumber 手机号码
      * @param {string} accountData.remarks 备注信息，可选
-     * @returns {Promise<Object>} 已添加的账号记录
+     * @returns {Promise<Object>} 已更新的账号记录
      */
     async addPermanentlyBannedAccount(accountData) {
         try {
-            // 获取当前配置的数据源作为来源字段
-            const source = DB_CONFIG.accountsApiSource || 'main';
+            const { phoneNumber, remarks } = accountData;
+            let result = null;
+            let source = null;
             
-            // 创建新记录
-            const newAccount = new PermanentlyBannedAccount({
-                phoneNumber: accountData.phoneNumber,
-                source: source,
-                remarks: accountData.remarks || ''
-            });
+            // 首先在main数据库中查询
+            logger.info(`在main数据库中查询手机号: ${phoneNumber}`);
+            const mainAccount = await Account.findOne(
+                { phoneNumber: phoneNumber },
+                null,
+                { connectionName: 'main' }
+            );
             
-            // 保存到主数据库
-            const savedAccount = await newAccount.save();
+            if (mainAccount) {
+                // 在main数据库中找到了记录
+                logger.info(`在main数据库中找到手机号: ${phoneNumber}`);
+                source = 'main';
+                
+                // 更新记录，设置isPermanentBan为true
+                result = await Account.findOneAndUpdate(
+                    { phoneNumber: phoneNumber },
+                    { $set: { isPermanentBan: true } },
+                    { new: true, connectionName: 'main' }
+                );
+            } else {
+                // 在main数据库中没有找到，尝试在shu数据库中查询
+                logger.info(`在shu数据库中查询手机号: ${phoneNumber}`);
+                const shuAccount = await Account.findOne(
+                    { phoneNumber: phoneNumber },
+                    null,
+                    { connectionName: 'shu' }
+                );
+                
+                if (shuAccount) {
+                    // 在shu数据库中找到了记录
+                    logger.info(`在shu数据库中找到手机号: ${phoneNumber}`);
+                    source = 'shu';
+                    
+                    // 更新记录，设置isPermanentBan为true
+                    result = await Account.findOneAndUpdate(
+                        { phoneNumber: phoneNumber },
+                        { $set: { isPermanentBan: true } },
+                        { new: true, connectionName: 'shu' }
+                    );
+                }
+            }
             
-            logger.info(`已添加疑似永久封禁账号: ${accountData.phoneNumber}, 数据来源: ${source}`);
-            return savedAccount;
+            if (result) {
+                logger.info(`成功将手机号 ${phoneNumber} 标记为永久封禁，数据源: ${source}`);
+                return { 
+                    success: true, 
+                    data: result, 
+                    source
+                };
+            } else {
+                logger.warn(`未找到手机号: ${phoneNumber}`);
+                return { 
+                    success: false, 
+                    message: '未找到指定手机号的账号记录' 
+                };
+            }
         } catch (error) {
-            logger.error(`添加疑似永久封禁账号失败: ${error.message}`);
+            logger.error(`标记永久封禁账号失败: ${error.message}`);
             throw error;
         }
     }

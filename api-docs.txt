@@ -452,7 +452,7 @@
 ### 15. 添加疑似永久封禁账号
 - 接口: /accounts/report-permanent-ban
 - 方法: GET
-- 描述: 标记一个账号为疑似永久封禁状态，存储在主数据库，来源字段根据当前环境配置的`ACCOUNTS_API_SOURCE`设置
+- 描述: 在main和shu数据库中查询指定手机号账号，并将找到的账号标记为isPermanentBan=true
 - 请求参数:
   - phoneNumber: 字符串，必填，手机号码
   - remarks: 字符串，可选，备注信息
@@ -462,16 +462,15 @@
         "status": "success",
         "data": {
             "phoneNumber": "手机号码",
-            "source": "来源(main/shu/both)",
-            "reportedAt": "2023-04-19T12:34:56.789Z",
-            "status": "pending"
+            "source": "main或shu，指示哪个数据库中找到并更新了账号",
+            "isPermanentBan": true
         },
-        "message": "成功添加疑似永久封禁账号"
+        "message": "成功将账号标记为永久封禁"
     }
-  - 已存在 (409):
+  - 账号不存在 (404):
     {
         "status": "error",
-        "message": "该号码已经被标记为疑似永久封禁"
+        "message": "未找到指定手机号的账号记录"
     }
   - 参数错误 (400):
     {
