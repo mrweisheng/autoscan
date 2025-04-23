@@ -1,4 +1,4 @@
-const { Shop, Product } = require('../models');
+const { Shop, Product, ShopProduct } = require('../models');
 const logger = require('../config/logger');
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');

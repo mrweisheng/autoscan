@@ -13,6 +13,6 @@ const shopProductSchema = new mongoose.Schema({
     versionKey: false
 });
 
-const ShopProduct = mongoose.model('ShopProduct', shopProductSchema);
+const ShopProduct = mongoose.model('ShopProduct', shopProductSchema, 'shop_products');
 
 module.exports = ShopProduct; 
