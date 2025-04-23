@@ -2,6 +2,7 @@ const { PermanentlyBannedAccount } = require('../models');
 const { logger } = require('../config');
 const { DB_CONFIG } = require('../config/database');
 const { Account } = require('../models');
+const { getShuAccount } = require('../models/Account');
 const mongoose = require('mongoose');
 
 class PermanentlyBannedAccountService {
@@ -20,43 +21,81 @@ class PermanentlyBannedAccountService {
             
             // 首先在main数据库中查询
             logger.info(`在main数据库中查询手机号: ${phoneNumber}`);
-            const mainAccount = await Account.findOne(
-                { phoneNumber: phoneNumber },
-                null,
-                { connectionName: 'main' }
-            );
+            // 直接使用Account模型查询main数据库
+            const mainAccount = await Account.findOne({ phoneNumber: phoneNumber });
             
             if (mainAccount) {
                 // 在main数据库中找到了记录
                 logger.info(`在main数据库中找到手机号: ${phoneNumber}`);
                 source = 'main';
                 
-                // 更新记录，设置isPermanentBan为true
-                result = await Account.findOneAndUpdate(
-                    { phoneNumber: phoneNumber },
-                    { $set: { isPermanentBan: true } },
-                    { new: true, connectionName: 'main' }
-                );
-            } else {
-                // 在main数据库中没有找到，尝试在shu数据库中查询
-                logger.info(`在shu数据库中查询手机号: ${phoneNumber}`);
-                const shuAccount = await Account.findOne(
-                    { phoneNumber: phoneNumber },
-                    null,
-                    { connectionName: 'shu' }
-                );
-                
-                if (shuAccount) {
-                    // 在shu数据库中找到了记录
-                    logger.info(`在shu数据库中找到手机号: ${phoneNumber}`);
-                    source = 'shu';
+                // 使用MongoDB原生方法强制更新字段，不受模型Schema限制
+                try {
+                    // 获取数据库连接
+                    const db = mongoose.connection.db;
+                    // 直接使用原生方法更新
+                    await db.collection('accounts').updateOne(
+                        { phoneNumber: phoneNumber },
+                        { $set: { isPermanentBan: true } }
+                    );
                     
-                    // 更新记录，设置isPermanentBan为true
+                    // 获取更新后的数据
+                    result = await Account.findOne({ phoneNumber: phoneNumber });
+                    logger.info(`成功在main数据库中更新账号状态为永久封禁: ${phoneNumber}`);
+                } catch (updateError) {
+                    logger.error(`使用原生方法更新main数据库时出错: ${updateError.message}`);
+                    // 尝试使用模型方法
                     result = await Account.findOneAndUpdate(
                         { phoneNumber: phoneNumber },
                         { $set: { isPermanentBan: true } },
-                        { new: true, connectionName: 'shu' }
+                        { new: true }
                     );
+                }
+            } else {
+                // 在main数据库中没有找到，尝试在shu数据库中查询
+                logger.info(`在shu数据库中查询手机号: ${phoneNumber}`);
+                
+                try {
+                    // 获取Shu数据库模型
+                    const ShuAccount = await getShuAccount();
+                    
+                    if (ShuAccount) {
+                        const shuAccount = await ShuAccount.findOne({ phoneNumber: phoneNumber });
+                        
+                        if (shuAccount) {
+                            // 在shu数据库中找到了记录
+                            logger.info(`在shu数据库中找到手机号: ${phoneNumber}`);
+                            source = 'shu';
+                            
+                            try {
+                                // 获取shu数据库连接
+                                const shuDb = ShuAccount.db;
+                                // 直接使用原生方法更新
+                                await shuDb.collection('accounts').updateOne(
+                                    { phoneNumber: phoneNumber },
+                                    { $set: { isPermanentBan: true } }
+                                );
+                                
+                                // 获取更新后的数据
+                                result = await ShuAccount.findOne({ phoneNumber: phoneNumber });
+                                logger.info(`成功在shu数据库中更新账号状态为永久封禁: ${phoneNumber}`);
+                            } catch (updateError) {
+                                logger.error(`使用原生方法更新shu数据库时出错: ${updateError.message}`);
+                                // 尝试使用模型方法
+                                result = await ShuAccount.findOneAndUpdate(
+                                    { phoneNumber: phoneNumber },
+                                    { $set: { isPermanentBan: true } },
+                                    { new: true }
+                                );
+                            }
+                        } else {
+                            logger.warn(`在shu数据库中未找到手机号: ${phoneNumber}`);
+                        }
+                    } else {
+                        logger.error('无法获取Shu数据库连接');
+                    }
+                } catch (shuError) {
+                    logger.error(`查询shu数据库时出错: ${shuError.message}`);
                 }
             }
             
@@ -64,7 +103,11 @@ class PermanentlyBannedAccountService {
                 logger.info(`成功将手机号 ${phoneNumber} 标记为永久封禁，数据源: ${source}`);
                 return { 
                     success: true, 
-                    data: result, 
+                    data: {
+                        phoneNumber: phoneNumber,
+                        source: source,
+                        isPermanentBan: true  // 无论数据库是否返回此字段，都在响应中包含
+                    },
                     source
                 };
             } else {

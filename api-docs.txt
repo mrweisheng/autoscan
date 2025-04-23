@@ -318,7 +318,7 @@
 ### 11. 标记账号处理成功
 - 接口: /accounts/mark-handled
 - 方法: GET
-- 描述: 将指定账号的 isHandle 状态设置为 true
+- 描述: 在main和shu两个数据库中查询指定手机号账号，并将找到的账号的isHandle状态设置为true
 - 请求参数:
   - phoneNumber: 字符串，必填，手机号码
 - 响应示例:
@@ -327,7 +327,8 @@
         "status": "success",
         "data": {
             "phoneNumber": "手机号码",
-            "isHandle": true
+            "isHandle": true,
+            "source": "main或shu，表示在哪个数据库中找到并更新了该账号"
         },
         "message": "账号标记为已处理"
     }

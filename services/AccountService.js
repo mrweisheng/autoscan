@@ -221,45 +221,46 @@ class AccountService {
      * @returns {Promise<Object>} 更新后的账号
      */
     async markAccountAsHandled(phoneNumber) {
-        // 根据配置选择数据源
-        const dataSource = DB_CONFIG.accountsApiSource;
-        
         let result = null;
         
-        if (dataSource === 'main' || dataSource === 'both') {
-            // 尝试在主数据库更新
-            result = await Account.findOneAndUpdate(
-                { phoneNumber },
-                { $set: { isHandle: true } },
-                { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
-            );
-            
-            if (result) {
-                logger.info(`在主数据库中标记账号为已处理: ${phoneNumber}`);
-            }
+        // 1. 首先尝试在main数据库中查询和更新
+        result = await Account.findOneAndUpdate(
+            { phoneNumber },
+            { $set: { isHandle: true } },
+            { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1, source: 'main' } }
+        );
+        
+        if (result) {
+            logger.info(`在main数据库中标记账号为已处理: ${phoneNumber}`);
+            // 如果在main数据库找到了，则添加source字段
+            result = { ...result.toObject(), source: 'main' };
+            return result;
         }
         
-        if ((dataSource === 'shu' || (dataSource === 'both' && !result)) && !result) {
-            // 在Shu数据库中尝试更新
-            try {
-                const ShuAccount = await getShuAccount();
-                if (ShuAccount) {
-                    result = await ShuAccount.findOneAndUpdate(
-                        { phoneNumber },
-                        { $set: { isHandle: true } },
-                        { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
-                    );
-                    
-                    if (result) {
-                        logger.info(`在Shu数据库中标记账号为已处理: ${phoneNumber}`);
-                    }
+        // 2. 如果main数据库没找到，则尝试在shu数据库中查询和更新
+        try {
+            const ShuAccount = await getShuAccount();
+            if (ShuAccount) {
+                result = await ShuAccount.findOneAndUpdate(
+                    { phoneNumber },
+                    { $set: { isHandle: true } },
+                    { new: true, projection: { _id: 0, phoneNumber: 1, isHandle: 1 } }
+                );
+                
+                if (result) {
+                    logger.info(`在shu数据库中标记账号为已处理: ${phoneNumber}`);
+                    // 如果在shu数据库找到了，则添加source字段
+                    result = { ...result.toObject(), source: 'shu' };
+                    return result;
                 }
-            } catch (error) {
-                logger.error(`在Shu数据库中标记账号失败: ${error.message}`);
             }
+        } catch (error) {
+            logger.error(`在shu数据库中标记账号失败: ${error.message}`);
         }
-
-        return result;
+        
+        // 两个数据库都没找到
+        logger.warn(`未在任何数据库中找到手机号: ${phoneNumber}`);
+        return null;
     }
 
     /**

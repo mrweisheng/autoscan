@@ -127,12 +127,13 @@ class AccountController {
                 });
             }
 
-            logger.info(`成功标记账号处理状态: ${phoneNumber}, isHandle=true`);
+            logger.info(`成功标记账号处理状态: ${phoneNumber}, isHandle=true, 数据来源: ${result.source}`);
             return res.json({
                 status: "success",
                 data: {
                     phoneNumber: result.phoneNumber,
-                    isHandle: result.isHandle
+                    isHandle: result.isHandle,
+                    source: result.source
                 },
                 message: "账号标记为已处理"
             });
