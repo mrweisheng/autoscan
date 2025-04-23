@@ -770,7 +770,12 @@ class AutoLoginService {
                 this.bannedAccountsCache = await Account.find(
                     { 
                         status: 'banned',
-                        isHandle: false
+                        isHandle: false,
+                        // 添加条件：排除isPermanentBan为true的记录
+                        $or: [
+                            { isPermanentBan: { $ne: true } },
+                            { isPermanentBan: { $exists: false } }
+                        ]
                     },
                     { 
                         _id: 0,

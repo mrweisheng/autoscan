@@ -173,7 +173,11 @@ class AccountService {
         return await Account.find(
             { 
                 status: 'banned',
-                isHandle: false
+                isHandle: false,
+                $or: [
+                    { isPermanentBan: { $ne: true } },
+                    { isPermanentBan: { $exists: false } }
+                ]
             },
             {
                 _id: 0,
@@ -200,7 +204,11 @@ class AccountService {
             return await ShuAccount.find(
                 { 
                     status: 'banned',
-                    isHandle: false
+                    isHandle: false,
+                    $or: [
+                        { isPermanentBan: { $ne: true } },
+                        { isPermanentBan: { $exists: false } }
+                    ]
                 },
                 {
                     _id: 0,
