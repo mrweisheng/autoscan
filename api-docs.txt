@@ -599,6 +599,39 @@
         "message": "服务器内部错误"
     }
 
+### 19. 获取账号状态
+- 接口: /accounts/status
+- 方法: GET
+- 描述: 根据手机号码查询账号状态，从主数据库和Shu数据库同时查询，优先使用主数据库的结果
+- 请求参数:
+  - phoneNumber: 字符串，必填，手机号码
+- 状态码说明:
+  - 0: 账号不存在（两个数据库中都未找到）
+  - 1: 封禁状态 (status: 'banned', isHandle: false, isPermanentBan不为true)
+  - 2: 解封可接码 (status: 'banned', isHandle: true, isPermanentBan不为true)
+  - 3: 永久封禁 (isPermanentBan: true)
+  - 4: 已扫码 (status: 'online')
+  - 5: 其他状态
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": {
+            "phoneNumber": "手机号码",
+            "statusCode": 1
+        }
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必填参数: phoneNumber"
+    }
+  - 错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误

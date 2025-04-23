@@ -172,6 +172,39 @@ class AccountController {
             });
         }
     }
+
+    async getAccountStatus(req, res) {
+        try {
+            const { phoneNumber } = req.query;
+            
+            // 验证参数
+            if (!phoneNumber) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "缺少必填参数: phoneNumber"
+                });
+            }
+            
+            // 获取账号状态
+            const result = await accountService.getAccountStatus(phoneNumber);
+            
+            // 返回结果
+            return res.json({
+                status: "success",
+                data: {
+                    phoneNumber: result.phoneNumber,
+                    statusCode: result.statusCode
+                }
+            });
+            
+        } catch (error) {
+            logger.error(`获取账号状态失败: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
 }
 
 module.exports = new AccountController(); 

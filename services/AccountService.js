@@ -318,6 +318,81 @@ class AccountService {
             throw error;
         }
     }
+
+    /**
+     * 获取账号状态
+     * @param {string} phoneNumber 手机号码
+     * @returns {Promise<Object>} 账号状态信息
+     */
+    async getAccountStatus(phoneNumber) {
+        try {
+            const requestId = Math.random().toString(36).substring(2, 10);
+            logger.info(`[${requestId}] 获取账号状态: ${phoneNumber}`);
+            
+            // 定义返回结构
+            const result = {
+                phoneNumber,
+                statusCode: 0 // 0:不存在 1:封禁 2:解封可接码 3:永久封禁 4:已扫码 5:其他状态
+            };
+            
+            // 从主数据库查询
+            const mainAccount = await Account.findOne(
+                { phoneNumber },
+                { 
+                    _id: 0,
+                    status: 1,
+                    isHandle: 1,
+                    isPermanentBan: 1
+                }
+            ).lean();
+            
+            // 从Shu数据库查询
+            let shuAccount = null;
+            const ShuAccount = await getShuAccount();
+            if (ShuAccount) {
+                shuAccount = await ShuAccount.findOne(
+                    { phoneNumber },
+                    { 
+                        _id: 0,
+                        status: 1,
+                        isHandle: 1,
+                        isPermanentBan: 1
+                    }
+                ).lean();
+            }
+            
+            // 确定使用哪个账号数据（优先主数据库）
+            const account = mainAccount || shuAccount;
+            
+            // 判断状态
+            if (!account) {
+                // 账号不存在
+                result.statusCode = 0;
+            } else if (account.isPermanentBan === true) {
+                // 永久封禁
+                result.statusCode = 3;
+            } else if (account.status === 'banned' && account.isHandle === false) {
+                // 封禁状态
+                result.statusCode = 1;
+            } else if (account.status === 'banned' && account.isHandle === true) {
+                // 解封可接码
+                result.statusCode = 2;
+            } else if (account.status === 'online') {
+                // 已扫码
+                result.statusCode = 4;
+            } else {
+                // 其他状态
+                result.statusCode = 5;
+            }
+            
+            logger.info(`[${requestId}] 账号 ${phoneNumber} 状态查询结果: ${result.statusCode}`);
+            return result;
+            
+        } catch (error) {
+            logger.error(`获取账号状态失败: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 module.exports = new AccountService(); 
