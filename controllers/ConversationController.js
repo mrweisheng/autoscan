@@ -119,6 +119,87 @@ class ConversationController {
             });
         }
     }
+
+    /**
+     * 获取所有已完成视频通话的会话记录
+     * @param {Express.Request} req - 请求对象
+     * @param {Express.Response} res - 响应对象
+     */
+    async getVideoCallConversations(req, res) {
+        try {
+            const result = await conversationService.getVideoCallConversations();
+            
+            return res.json({
+                status: "success",
+                data: result.conversations,
+                count: result.count,
+                message: `找到 ${result.count} 条已完成视频通话的会话记录`
+            });
+        } catch (error) {
+            logger.error(`获取视频通话会话记录出错: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
+
+    /**
+     * 重置指定的视频通话记录
+     * @param {Express.Request} req - 请求对象
+     * @param {Express.Response} res - 响应对象
+     */
+    async resetVideoCall(req, res) {
+        try {
+            const { conversationKey } = req.query;
+            
+            // 验证请求参数
+            if (!conversationKey) {
+                logger.warn(`缺少必要参数: conversationKey`);
+                return res.status(400).json({
+                    status: "error",
+                    message: "缺少必要参数: conversationKey"
+                });
+            }
+            
+            // 重置视频通话记录
+            const result = await conversationService.resetVideoCall(conversationKey);
+            
+            if (!result.success) {
+                let statusCode = 400;
+                let message = "重置视频通话记录失败";
+                
+                if (result.error === "conversation_not_found") {
+                    message = "指定的会话不存在";
+                } else if (result.error === "call_not_active") {
+                    message = "该会话没有活跃的视频通话记录";
+                }
+                
+                return res.status(statusCode).json({
+                    status: "error",
+                    error: result.error,
+                    message
+                });
+            }
+            
+            // 成功处理
+            return res.json({
+                status: "success",
+                message: "视频通话记录已重置",
+                data: {
+                    conversationKey,
+                    hasVideoCall: false
+                }
+            });
+            
+        } catch (error) {
+            logger.error(`重置视频通话记录出错: ${error.message}`);
+            return res.status(500).json({
+                status: "error",
+                message: "服务器内部错误"
+            });
+        }
+    }
 }
 
 module.exports = new ConversationController(); 

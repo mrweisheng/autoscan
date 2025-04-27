@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频通话记录管理</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #1890ff;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .panel {
+            border: 1px solid #e8e8e8;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f5f5f5;
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 1px solid #e8e8e8;
+            padding-bottom: 10px;
+        }
+        .btn {
+            padding: 8px 16px;
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #40a9ff;
+        }
+        .btn-danger {
+            background-color: #ff4d4f;
+        }
+        .btn-danger:hover {
+            background-color: #ff7875;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding:.75rem;
+            margin: 10px 0;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        th {
+            background-color: #fafafa;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .error {
+            background-color: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        .loading {
+            text-align: center;
+            display: none;
+            margin: 20px 0;
+        }
+        /* 确认弹窗样式 */
+        .confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .confirm-dialog {
+            background: white;
+            border-radius: 6px;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+        }
+        .confirm-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .confirm-content {
+            margin-bottom: 20px;
+            color: #666;
+        }
+        .confirm-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .confirm-actions button {
+            margin-left: 10px;
+        }
+        .btn-default {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .btn-default:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h1>视频通话记录管理</h1>
+    
+    <!-- 查询所有视频通话记录 -->
+    <div class="panel">
+        <h2>查询所有视频通话记录 (API #22)</h2>
+        <p>获取所有hasVideoCall为true的会话记录</p>
+        <button id="getRecordsBtn" class="btn">查询所有记录</button>
+        <div id="loading" class="loading">加载中...</div>
+        <div id="queryResult"></div>
+    </div>
+    
+    <!-- 重置特定视频通话记录 -->
+    <div class="panel">
+        <h2>重置视频通话记录 (API #23)</h2>
+        <p>将指定conversationKey的hasVideoCall从true重置为false</p>
+        <div>
+            <label for="conversationKey">会话键 (Conversation Key):</label>
+            <input type="text" id="conversationKey" placeholder="例如: 12345678901_12345678902">
+        </div>
+        <button id="resetBtn" class="btn btn-danger">重置记录</button>
+        <div id="resetResult"></div>
+    </div>
+    
+    <!-- 确认弹窗 -->
+    <div id="confirmModal" class="confirm-modal">
+        <div class="confirm-dialog">
+            <div class="confirm-title">确认重置</div>
+            <div class="confirm-content">
+                确定要将会话记录 <strong id="confirmKey"></strong> 的视频通话状态重置为 false 吗？
+            </div>
+            <div class="confirm-actions">
+                <button id="cancelBtn" class="btn btn-default">取消</button>
+                <button id="confirmBtn" class="btn btn-danger">确认重置</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // API基础URL
+        const API_BASE_URL = 'http://104.37.187.30:9000';
+        
+        // DOM元素
+        const getRecordsBtn = document.getElementById('getRecordsBtn');
+        const queryResult = document.getElementById('queryResult');
+        const loading = document.getElementById('loading');
+        const conversationKeyInput = document.getElementById('conversationKey');
+        const resetBtn = document.getElementById('resetBtn');
+        const resetResult = document.getElementById('resetResult');
+        
+        // 确认弹窗元素
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmKey = document.getElementById('confirmKey');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
+        
+        // 当前选中的会话键
+        let selectedKey = '';
+        
+        // 获取所有视频通话记录
+        getRecordsBtn.addEventListener('click', () => {
+            queryResult.innerHTML = '';
+            loading.style.display = 'block';
+            
+            fetch(`${API_BASE_URL}/conversations/video-calls`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    
+                    if (data.status === 'success') {
+                        const records = data.data || [];
+                        const count = records.length;
+                        
+                        // 创建成功消息
+                        const message = document.createElement('div');
+                        message.className = 'message success';
+                        message.textContent = `成功获取 ${count} 条记录`;
+                        queryResult.appendChild(message);
+                        
+                        if (count > 0) {
+                            // 创建表格
+                            const table = document.createElement('table');
+                            const thead = document.createElement('thead');
+                            thead.innerHTML = `
+                                <tr>
+                                    <th>序号</th>
+                                    <th>会话键</th>
+                                    <th>创建时间</th>
+                                    <th>更新时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            `;
+                            
+                            const tbody = document.createElement('tbody');
+                            records.forEach((record, index) => {
+                                const tr = document.createElement('tr');
+                                
+                                // 格式化日期
+                                const createdAt = formatDate(record.createdAt);
+                                const updatedAt = formatDate(record.updatedAt);
+                                
+                                tr.innerHTML = `
+                                    <td>${index + 1}</td>
+                                    <td>${record.conversationKey}</td>
+                                    <td>${createdAt}</td>
+                                    <td>${updatedAt}</td>
+                                    <td>
+                                        <button class="btn btn-danger" data-key="${record.conversationKey}">重置</button>
+                                    </td>
+                                `;
+                                
+                                tbody.appendChild(tr);
+                            });
+                            
+                            table.appendChild(thead);
+                            table.appendChild(tbody);
+                            queryResult.appendChild(table);
+                            
+                            // 添加表格中重置按钮的点击事件
+                            table.querySelectorAll('button').forEach(btn => {
+                                btn.addEventListener('click', () => {
+                                    const key = btn.getAttribute('data-key');
+                                    // 显示确认弹窗
+                                    showConfirmDialog(key);
+                                });
+                            });
+                        } else {
+                            queryResult.innerHTML += '<p>没有找到记录</p>';
+                        }
+                    } else {
+                        // 创建错误消息
+                        const message = document.createElement('div');
+                        message.className = 'message error';
+                        message.textContent = `查询失败: ${data.message}`;
+                        queryResult.appendChild(message);
+                    }
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    
+                    // 创建错误消息
+                    const message = document.createElement('div');
+                    message.className = 'message error';
+                    message.textContent = `请求出错: ${error.message}`;
+                    queryResult.appendChild(message);
+                });
+        });
+        
+        // 重置按钮点击事件
+        resetBtn.addEventListener('click', () => {
+            const key = conversationKeyInput.value.trim();
+            if (!key) {
+                const message = document.createElement('div');
+                message.className = 'message error';
+                message.textContent = '请输入会话键';
+                resetResult.innerHTML = '';
+                resetResult.appendChild(message);
+                return;
+            }
+            
+            // 显示确认弹窗
+            showConfirmDialog(key);
+        });
+        
+        // 显示确认弹窗
+        function showConfirmDialog(key) {
+            selectedKey = key;
+            confirmKey.textContent = key;
+            confirmModal.style.display = 'flex';
+        }
+        
+        // 取消按钮点击事件
+        cancelBtn.addEventListener('click', () => {
+            confirmModal.style.display = 'none';
+        });
+        
+        // 确认按钮点击事件
+        confirmBtn.addEventListener('click', () => {
+            confirmModal.style.display = 'none';
+            resetVideoCall(selectedKey);
+        });
+        
+        // 重置视频通话记录
+        function resetVideoCall(conversationKey) {
+            resetResult.innerHTML = '';
+            
+            fetch(`${API_BASE_URL}/conversations/reset-video-call?conversationKey=${encodeURIComponent(conversationKey)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // 创建成功消息
+                        const message = document.createElement('div');
+                        message.className = 'message success';
+                        message.textContent = `成功重置视频通话记录: ${data.data.conversationKey}`;
+                        resetResult.appendChild(message);
+                        
+                        // 清空输入框
+                        conversationKeyInput.value = '';
+                        
+                        // 刷新记录列表
+                        if (queryResult.querySelector('table')) {
+                            getRecordsBtn.click();
+                        }
+                    } else {
+                        // 处理错误消息
+                        let errorMsg = data.message;
+                        if (data.error === 'conversation_not_found') {
+                            errorMsg = '指定的会话不存在';
+                        } else if (data.error === 'call_not_active') {
+                            errorMsg = '该会话没有活跃的视频通话记录';
+                        }
+                        
+                        // 创建错误消息
+                        const message = document.createElement('div');
+                        message.className = 'message error';
+                        message.textContent = `重置失败: ${errorMsg}`;
+                        resetResult.appendChild(message);
+                    }
+                })
+                .catch(error => {
+                    // 创建错误消息
+                    const message = document.createElement('div');
+                    message.className = 'message error';
+                    message.textContent = `请求出错: ${error.message}`;
+                    resetResult.appendChild(message);
+                });
+        }
+        
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`;
+        }
+        
+        // 数字补零
+        function padZero(num) {
+            return num.toString().padStart(2, '0');
+        }
+    </script>
+</body>
+</html> 

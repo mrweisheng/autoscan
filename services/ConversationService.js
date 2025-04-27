@@ -123,6 +123,90 @@ class ConversationService {
             throw error;
         }
     }
+
+    /**
+     * 获取所有已完成视频通话的会话记录
+     * @returns {Promise<Object>} - 包含会话列表和计数的对象
+     */
+    async getVideoCallConversations() {
+        try {
+            const requestId = Date.now().toString();
+            logger.info(`[${requestId}] 获取视频通话会话记录`);
+            
+            // 查询hasVideoCall为true的所有记录
+            const conversations = await Conversation.find({ hasVideoCall: true })
+                .sort({ updatedAt: -1 }) // 按照更新时间降序排列
+                .lean(); // 转为普通对象提高性能
+            
+            const count = conversations.length;
+            logger.info(`[${requestId}] 找到 ${count} 条视频通话记录`);
+            
+            return {
+                conversations,
+                count
+            };
+        } catch (error) {
+            logger.error(`获取视频通话会话记录时出错: ${error.message}`);
+            logger.error(`错误堆栈: ${error.stack}`);
+            throw error;
+        }
+    }
+
+    /**
+     * 重置指定的视频通话记录
+     * @param {string} conversationKey - 会话键
+     * @returns {Promise<Object>} - 处理结果
+     */
+    async resetVideoCall(conversationKey) {
+        try {
+            const requestId = Date.now().toString();
+            logger.info(`[${requestId}] 重置视频通话记录: ${conversationKey}`);
+            
+            // 查找会话
+            const conversation = await Conversation.findOne({ conversationKey });
+            
+            // 如果会话不存在
+            if (!conversation) {
+                logger.info(`[${requestId}] 会话不存在: ${conversationKey}`);
+                return {
+                    success: false,
+                    error: "conversation_not_found"
+                };
+            }
+            
+            // 检查是否有视频通话记录
+            if (!conversation.hasVideoCall) {
+                logger.info(`[${requestId}] 会话 ${conversationKey} 没有活跃的视频通话记录`);
+                return {
+                    success: false,
+                    error: "call_not_active"
+                };
+            }
+            
+            // 更新会话状态，将hasVideoCall设置为false
+            const updateResult = await Conversation.updateOne(
+                { conversationKey },
+                { $set: { hasVideoCall: false } }
+            );
+            
+            if (updateResult.modifiedCount > 0) {
+                logger.info(`[${requestId}] 会话 ${conversationKey} 的hasVideoCall已更新为false`);
+                return {
+                    success: true
+                };
+            } else {
+                logger.warn(`[${requestId}] 更新会话 ${conversationKey} 失败，未修改任何记录`);
+                return {
+                    success: false,
+                    error: "update_failed"
+                };
+            }
+        } catch (error) {
+            logger.error(`重置视频通话记录时出错: ${error.message}`);
+            logger.error(`错误堆栈: ${error.stack}`);
+            throw error;
+        }
+    }
 }
 
 module.exports = new ConversationService(); 

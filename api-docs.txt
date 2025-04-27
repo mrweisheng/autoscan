@@ -719,6 +719,90 @@
         "message": "服务器内部错误"
     }
 
+### 22. 获取所有已完成视频通话的会话记录
+- 接口: /conversations/video-calls
+- 方法: GET
+- 描述: 从配置的CONVERSATION_DB_URI数据库中获取所有hasVideoCall为true的会话记录
+- 请求参数: 无
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "data": [
+            {
+                "conversationKey": "12345678901_12345678902",
+                "hasVideoCall": true,
+                "createdAt": "2023-05-15T12:34:56.789Z",
+                "updatedAt": "2023-05-15T13:45:07.890Z"
+            },
+            {
+                "conversationKey": "12345678903_12345678904",
+                "hasVideoCall": true,
+                "createdAt": "2023-05-14T08:30:00.000Z",
+                "updatedAt": "2023-05-14T09:15:30.456Z"
+            }
+        ],
+        "count": 2,
+        "message": "找到 2 条已完成视频通话的会话记录"
+    }
+  - 未找到记录 (200):
+    {
+        "status": "success",
+        "data": [],
+        "count": 0,
+        "message": "找到 0 条已完成视频通话的会话记录"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
+### 23. 重置指定的视频通话记录
+- 接口: /conversations/reset-video-call
+- 方法: GET
+- 描述: 将指定conversationKey的hasVideoCall从true重置为false
+- 请求参数:
+  - conversationKey: 字符串，必填，会话唯一标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "message": "视频通话记录已重置",
+        "data": {
+            "conversationKey": "12345678901_12345678902",
+            "hasVideoCall": false
+        }
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必要参数: conversationKey"
+    }
+  - 会话不存在 (400):
+    {
+        "status": "error",
+        "error": "conversation_not_found",
+        "message": "指定的会话不存在"
+    }
+  - 无活跃通话 (400):
+    {
+        "status": "error",
+        "error": "call_not_active",
+        "message": "该会话没有活跃的视频通话记录"
+    }
+  - 更新失败 (400):
+    {
+        "status": "error",
+        "error": "update_failed",
+        "message": "重置视频通话记录失败"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误
