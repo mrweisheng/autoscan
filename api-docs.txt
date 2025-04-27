@@ -656,7 +656,7 @@
     }
   - 会话不存在 (200):
     {
-        "status": "error",
+        "status": "success",
         "canCall": false,
         "conversationKey": "12345678901_12345678902",
         "reason": "conversation_not_found",
@@ -675,7 +675,7 @@
 
 ### 21. 完成视频通话处理
 - 接口: /conversations/video-call-complete
-- 方法: POST
+- 方法: GET
 - 描述: 完成视频通话的记录和通知
 - 请求参数:
   - conversationKey: 字符串，必填，会话唯一标识

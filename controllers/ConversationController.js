@@ -68,7 +68,7 @@ class ConversationController {
      */
     async completeVideoCall(req, res) {
         try {
-            const { conversationKey } = req.body;
+            const { conversationKey } = req.query;
             
             // 验证请求参数
             if (!conversationKey) {

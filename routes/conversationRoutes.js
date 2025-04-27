@@ -6,6 +6,6 @@ const router = express.Router();
 router.get('/video-call-status', conversationController.checkVideoCallStatus);
 
 // 完成视频通话处理
-router.post('/video-call-complete', conversationController.completeVideoCall);
+router.get('/video-call-complete', conversationController.completeVideoCall);
 
 module.exports = router; 
