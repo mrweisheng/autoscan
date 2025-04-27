@@ -632,6 +632,93 @@
         "message": "服务器内部错误"
     }
 
+### 20. 检查视频通话状态
+- 接口: /conversations/video-call-status
+- 方法: GET
+- 描述: 根据两个电话号码检查是否可以进行视频通话
+- 请求参数:
+  - accountPhone: 字符串，必填，发起人电话号码
+  - recipientPhone: 字符串，必填，接收人电话号码
+- 响应示例:
+  - 成功可通话 (200):
+    {
+        "status": "success",
+        "canCall": true,
+        "conversationKey": "12345678901_12345678902",
+        "message": "可以视频通话"
+    }
+  - 成功不可通话 (200):
+    {
+        "status": "success",
+        "canCall": false,
+        "conversationKey": "12345678901_12345678902",
+        "message": "已存在视频通话，无法再次发起"
+    }
+  - 会话不存在 (200):
+    {
+        "status": "error",
+        "canCall": false,
+        "conversationKey": "12345678901_12345678902",
+        "reason": "conversation_not_found",
+        "message": "会话不存在"
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必要参数: accountPhone和recipientPhone"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
+### 21. 完成视频通话处理
+- 接口: /conversations/video-call-complete
+- 方法: POST
+- 描述: 完成视频通话的记录和通知
+- 请求参数:
+  - conversationKey: 字符串，必填，会话唯一标识
+- 响应示例:
+  - 成功 (200):
+    {
+        "status": "success",
+        "message": "视频通话已记录并通知",
+        "webhookResponse": {
+            "success": true,
+            "status": 202,
+            "message": "视频通话步骤已接受并调度执行"
+        }
+    }
+  - 参数错误 (400):
+    {
+        "status": "error",
+        "message": "缺少必要参数: conversationKey"
+    }
+  - 会话不存在 (400):
+    {
+        "status": "error",
+        "error": "conversation_not_found",
+        "message": "指定的会话不存在"
+    }
+  - 已有通话 (400):
+    {
+        "status": "error",
+        "error": "call_already_active",
+        "message": "已存在视频通话记录"
+    }
+  - Webhook失败 (500):
+    {
+        "status": "error",
+        "error": "webhook_failed",
+        "message": "Webhook通知失败: Connection refused"
+    }
+  - 服务器错误 (500):
+    {
+        "status": "error",
+        "message": "服务器内部错误"
+    }
+
 ## 错误码说明
 - 200: 请求成功
 - 400: 请求参数错误

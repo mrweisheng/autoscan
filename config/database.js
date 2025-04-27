@@ -32,6 +32,11 @@ const DB_CONFIG = {
         uri: process.env.MONGODB_SHU_URI || 'mongodb://test:test@104.37.187.30:27017/whatsapp_manager_test',
         options: MONGODB_OPTIONS
     },
+    // 聊天礼物数据库连接
+    chat_gift: {
+        uri: process.env.MONGODB_CHAT_GIFT_URI || 'mongodb://smartchat:szpzclljxk@104.37.187.30:27017/chat_gift',
+        options: MONGODB_OPTIONS
+    },
     // 账号数据API使用哪个数据库：'main'、'shu'或'both'
     accountsApiSource: process.env.ACCOUNTS_API_SOURCE || 'main'
 };

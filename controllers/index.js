@@ -4,6 +4,7 @@ const fileController = require('./FileController');
 const shopController = require('./ShopController');
 const emailController = require('./EmailController');
 const permanentlyBannedAccountController = require('./PermanentlyBannedAccountController');
+const conversationController = require('./ConversationController');
 
 module.exports = {
     accountController,
@@ -11,5 +12,6 @@ module.exports = {
     fileController,
     shopController,
     emailController,
-    permanentlyBannedAccountController
+    permanentlyBannedAccountController,
+    conversationController
 }; 

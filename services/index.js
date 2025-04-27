@@ -4,6 +4,7 @@ const fileService = require('./FileService');
 const shopService = require('./ShopService');
 const emailService = require('./EmailService');
 const permanentlyBannedAccountService = require('./PermanentlyBannedAccountService');
+const conversationService = require('./ConversationService');
 
 module.exports = {
     accountService,
@@ -11,5 +12,6 @@ module.exports = {
     fileService,
     shopService,
     emailService,
-    permanentlyBannedAccountService
+    permanentlyBannedAccountService,
+    conversationService
 }; 
