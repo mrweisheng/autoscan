@@ -23,6 +23,17 @@ class ConversationController {
             // 查询会话状态
             const result = await conversationService.checkVideoCallStatus(accountPhone, recipientPhone);
             
+            // 如果会话不存在
+            if (result.reason === "conversation_not_found") {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey: result.conversationKey,
+                    reason: result.reason,
+                    message: "会话不存在"
+                });
+            }
+            
             // 如果是新创建的会话或存在的可通话会话
             if (result.canCall) {
                 return res.json({
