@@ -3,6 +3,7 @@ const { getRandomGroup } = require('../services/PgGroupService');
 class GroupController {
     async getRandomGroup(req, res) {
         try {
+            res.set('Cache-Control', 'no-store');
             const group = await getRandomGroup();
             if (group) {
                 res.json({ status: 'success', data: group });
