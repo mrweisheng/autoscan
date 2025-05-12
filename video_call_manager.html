@@ -133,6 +133,19 @@
         .btn-default:hover {
             background-color: #e0e0e0;
         }
+        /* 全局提示框 */
+        #globalMessage {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 300px;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+            z-index: 1001;
+            display: none;
+            transition: opacity 0.3s;
+        }
     </style>
 </head>
 <body>
@@ -147,17 +160,8 @@
         <div id="queryResult"></div>
     </div>
     
-    <!-- 重置特定视频通话记录 -->
-    <div class="panel">
-        <h2>重置视频通话记录 (API #23)</h2>
-        <p>将指定conversationKey的hasVideoCall从true重置为false</p>
-        <div>
-            <label for="conversationKey">会话键 (Conversation Key):</label>
-            <input type="text" id="conversationKey" placeholder="例如: 12345678901_12345678902">
-        </div>
-        <button id="resetBtn" class="btn btn-danger">重置记录</button>
-        <div id="resetResult"></div>
-    </div>
+    <!-- 全局消息提示 -->
+    <div id="globalMessage"></div>
     
     <!-- 确认弹窗 -->
     <div id="confirmModal" class="confirm-modal">
@@ -181,9 +185,7 @@
         const getRecordsBtn = document.getElementById('getRecordsBtn');
         const queryResult = document.getElementById('queryResult');
         const loading = document.getElementById('loading');
-        const conversationKeyInput = document.getElementById('conversationKey');
-        const resetBtn = document.getElementById('resetBtn');
-        const resetResult = document.getElementById('resetResult');
+        const globalMessage = document.getElementById('globalMessage');
         
         // 确认弹窗元素
         const confirmModal = document.getElementById('confirmModal');
@@ -283,22 +285,6 @@
                 });
         });
         
-        // 重置按钮点击事件
-        resetBtn.addEventListener('click', () => {
-            const key = conversationKeyInput.value.trim();
-            if (!key) {
-                const message = document.createElement('div');
-                message.className = 'message error';
-                message.textContent = '请输入会话键';
-                resetResult.innerHTML = '';
-                resetResult.appendChild(message);
-                return;
-            }
-            
-            // 显示确认弹窗
-            showConfirmDialog(key);
-        });
-        
         // 显示确认弹窗
         function showConfirmDialog(key) {
             selectedKey = key;
@@ -319,25 +305,15 @@
         
         // 重置视频通话记录
         function resetVideoCall(conversationKey) {
-            resetResult.innerHTML = '';
-            
             fetch(`${API_BASE_URL}/conversations/reset-video-call?conversationKey=${encodeURIComponent(conversationKey)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        // 创建成功消息
-                        const message = document.createElement('div');
-                        message.className = 'message success';
-                        message.textContent = `成功重置视频通话记录: ${data.data.conversationKey}`;
-                        resetResult.appendChild(message);
-                        
-                        // 清空输入框
-                        conversationKeyInput.value = '';
+                        // 显示成功消息
+                        showGlobalMessage('success', `成功重置视频通话记录: ${data.data.conversationKey}`);
                         
                         // 刷新记录列表
-                        if (queryResult.querySelector('table')) {
-                            getRecordsBtn.click();
-                        }
+                        getRecordsBtn.click();
                     } else {
                         // 处理错误消息
                         let errorMsg = data.message;
@@ -347,20 +323,31 @@
                             errorMsg = '该会话没有活跃的视频通话记录';
                         }
                         
-                        // 创建错误消息
-                        const message = document.createElement('div');
-                        message.className = 'message error';
-                        message.textContent = `重置失败: ${errorMsg}`;
-                        resetResult.appendChild(message);
+                        // 显示错误消息
+                        showGlobalMessage('error', `重置失败: ${errorMsg}`);
                     }
                 })
                 .catch(error => {
-                    // 创建错误消息
-                    const message = document.createElement('div');
-                    message.className = 'message error';
-                    message.textContent = `请求出错: ${error.message}`;
-                    resetResult.appendChild(message);
+                    // 显示错误消息
+                    showGlobalMessage('error', `请求出错: ${error.message}`);
                 });
+        }
+        
+        // 显示全局消息
+        function showGlobalMessage(type, message) {
+            globalMessage.textContent = message;
+            globalMessage.className = '';
+            globalMessage.classList.add(type === 'success' ? 'success' : 'error');
+            globalMessage.style.display = 'block';
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                globalMessage.style.opacity = '0';
+                setTimeout(() => {
+                    globalMessage.style.display = 'none';
+                    globalMessage.style.opacity = '1';
+                }, 300);
+            }, 3000);
         }
         
         // 格式化日期

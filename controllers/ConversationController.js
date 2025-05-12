@@ -20,38 +20,80 @@ class ConversationController {
                 });
             }
             
-            // 查询会话状态
-            const result = await conversationService.checkVideoCallStatus(accountPhone, recipientPhone);
-            
-            // 如果会话不存在
-            if (result.reason === "conversation_not_found") {
+            // 生成会话键
+            const conversationKey = await conversationService.generateConversationKey(accountPhone, recipientPhone);
+            // 查找会话
+            const conversation = await conversationService.findConversationByKey(conversationKey);
+            if (!conversation) {
                 return res.json({
                     status: "success",
                     canCall: false,
-                    conversationKey: result.conversationKey,
-                    reason: result.reason,
+                    conversationKey,
+                    reason: "conversation_not_found",
                     message: "会话不存在"
                 });
             }
-            
-            // 如果是新创建的会话或存在的可通话会话
-            if (result.canCall) {
+            const replyFlow = conversation.replyFlow || {};
+            const flowId = replyFlow.flowId;
+            const currentStep = replyFlow.currentStep;
+            if (!flowId) {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey,
+                    reason: "flow_not_started",
+                    message: "会话流程未进行"
+                });
+            }
+            // 查找replyflow
+            const replyFlowDoc = await conversationService.findReplyFlowById(flowId);
+            if (!replyFlowDoc) {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey,
+                    reason: "replyflow_not_found",
+                    message: "未找到流程定义"
+                });
+            }
+            let steps = [];
+            try {
+                steps = typeof replyFlowDoc.steps === 'string' ? JSON.parse(replyFlowDoc.steps) : replyFlowDoc.steps;
+            } catch (e) {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey,
+                    reason: "steps_parse_error",
+                    message: "流程步骤解析失败"
+                });
+            }
+            if (!Array.isArray(steps) || !steps[currentStep]) {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey,
+                    reason: "step_not_found",
+                    message: "未找到当前流程步骤"
+                });
+            }
+            const step = steps[currentStep];
+            if (step.triggerType === 'video_call') {
                 return res.json({
                     status: "success",
                     canCall: true,
-                    conversationKey: result.conversationKey,
+                    conversationKey,
                     message: "可以视频通话"
                 });
+            } else {
+                return res.json({
+                    status: "success",
+                    canCall: false,
+                    conversationKey,
+                    reason: "not_video_call_step",
+                    message: "当前流程步骤不允许视频通话"
+                });
             }
-            
-            // 如果会话存在但已有通话
-            return res.json({
-                status: "success",
-                canCall: false,
-                conversationKey: result.conversationKey,
-                message: "已存在视频通话，无法再次发起"
-            });
-            
         } catch (error) {
             logger.error(`检查视频通话状态出错: ${error.message}`);
             return res.status(500).json({

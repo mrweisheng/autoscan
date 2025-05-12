@@ -51,4 +51,5 @@ conversationSchema.statics.generateConversationKey = function(accountPhone, reci
 // 在专用连接上创建模型
 const Conversation = conversationConnection.model('Conversation', conversationSchema, collectionName);
 
-module.exports = Conversation; 
+module.exports = Conversation;
+module.exports.conversationConnection = conversationConnection; 

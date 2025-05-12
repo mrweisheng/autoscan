@@ -1,4 +1,5 @@
 const Conversation = require('../models/ConversationSchema');
+const { conversationConnection } = require('../models/ConversationSchema');
 const { logger } = require('../config');
 const fetch = require('node-fetch');
 
@@ -206,6 +207,37 @@ class ConversationService {
             logger.error(`错误堆栈: ${error.stack}`);
             throw error;
         }
+    }
+
+    // 新增：生成会话键
+    async generateConversationKey(accountPhone, recipientPhone) {
+        // 保持和ConversationSchema一致
+        const cleanAccount = String(accountPhone).replace(/\D/g, "");
+        const cleanRecipient = String(recipientPhone).replace(/\D/g, "");
+        const phones = [cleanAccount, cleanRecipient].sort();
+        return `${phones[0]}_${phones[1]}`;
+    }
+
+    // 新增：查找会话
+    async findConversationByKey(conversationKey) {
+        const result = await Conversation.findOne({ conversationKey }).lean();
+        logger.info(`[ConversationService] 查找会话 conversationKey=${conversationKey}，查到=${!!result}`);
+        return result;
+    }
+
+    // 新增：查找replyflow
+    async findReplyFlowById(flowId) {
+        const logger = require('../config').logger;
+        logger.info(`[ConversationService] 查找replyflow flowId=${flowId}`);
+        const mongoose = require('mongoose');
+        const ReplyFlow = conversationConnection.model('ReplyFlow', new mongoose.Schema({}, { strict: false }), 'replyflows');
+        let id = flowId;
+        if (typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)) {
+            id = new mongoose.Types.ObjectId(id);
+        }
+        const result = await ReplyFlow.findById(id).lean();
+        logger.info(`[ConversationService] 查找replyflow结果 flowId=${flowId}，查到=${!!result}`);
+        return result;
     }
 }
 
