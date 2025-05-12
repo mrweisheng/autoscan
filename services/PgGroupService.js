@@ -1,11 +1,12 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
 const pool = new Pool({
-    host: '104.37.187.30',
-    user: 'gsgj',
-    password: 'wktjsw1688',
-    port: 5432,
-    database: 'vcf_config',
+    host: process.env.PG_HOST,
+    user: process.env.PG_USER,
+    password: process.env.PG_PASSWORD,
+    port: process.env.PG_PORT,
+    database: process.env.PG_DATABASE,
 });
 
 async function getRandomGroup() {
