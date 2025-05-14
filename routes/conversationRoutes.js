@@ -1,6 +1,8 @@
 const express = require('express');
 const conversationController = require('../controllers/ConversationController');
 const GroupController = require('../controllers/GroupController');
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
 const router = express.Router();
 
 // 检查视频通话状态
@@ -17,5 +19,8 @@ router.get('/reset-video-call', conversationController.resetVideoCall);
 
 // 获取group表随机一条数据
 router.get('/group/random', GroupController.getRandomGroup);
+
+// 导入group表数据（全量覆盖）
+router.post('/group/import', upload.single('file'), GroupController.importGroups);
 
 module.exports = router; 
